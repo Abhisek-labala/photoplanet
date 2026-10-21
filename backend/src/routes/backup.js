@@ -13,60 +13,80 @@ const upload = multer({ dest: path.join(DATA_DIR, 'temp-uploads') });
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-// Download SQLite DB file
-router.get('/download', (req, res) => {
-  if (!fs.existsSync(DB_PATH)) {
-    return res.status(404).json({ error: 'Database file not found.' });
-  }
-
-  // Checkpoint WAL to flush all transactions into main DB file
+// Download backup
+router.get('/download', async (req, res) => {
   try {
-    db.pragma('wal_checkpoint(TRUNCATE)');
+    const tables = [
+      'users', 'clients', 'event_types', 'events', 'service_categories',
+      'services', 'quotations', 'quotation_events', 'quotation_items',
+      'quotation_payment_terms', 'quotation_status_history', 'settings', 'quotation_sequence'
+    ];
+
+    const exportData = {
+      exported_at: new Date().toISOString(),
+      version: '1.0',
+      database: 'postgresql',
+      data: {}
+    };
+
+    for (const tableName of tables) {
+      try {
+        exportData.data[tableName] = await db.prepare(`SELECT * FROM ${tableName}`).all();
+      } catch (err) {
+        exportData.data[tableName] = [];
+      }
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=photoplanet-backup-${timestamp}.json`);
+
+    await logAudit(req.user, 'BACKUP_DOWNLOAD', 'database', 'json', null, null, req.ip);
+    res.send(JSON.stringify(exportData, null, 2));
   } catch (err) {
-    console.warn('WAL checkpoint warning:', err.message);
+    console.error('Backup download error:', err);
+    res.status(500).json({ error: 'Backup failed: ' + err.message });
   }
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const filename = `studio-gfx-backup-${timestamp}.db`;
-
-  logAudit(req.user, 'BACKUP_DOWNLOAD', 'database', 'sqlite', null, { filename }, req.ip);
-
-  res.download(DB_PATH, filename);
 });
 
 // Export all data as JSON
-router.get('/export-json', (req, res) => {
-  const tables = [
-    'users', 'clients', 'event_types', 'events', 'service_categories',
-    'services', 'quotations', 'quotation_events', 'quotation_items',
-    'quotation_payment_terms', 'quotation_status_history', 'settings', 'quotation_sequence'
-  ];
+router.get('/export-json', async (req, res) => {
+  try {
+    const tables = [
+      'users', 'clients', 'event_types', 'events', 'service_categories',
+      'services', 'quotations', 'quotation_events', 'quotation_items',
+      'quotation_payment_terms', 'quotation_status_history', 'settings', 'quotation_sequence'
+    ];
 
-  const exportData = {
-    exported_at: new Date().toISOString(),
-    version: '1.0',
-    data: {}
-  };
+    const exportData = {
+      exported_at: new Date().toISOString(),
+      version: '1.0',
+      database: 'postgresql',
+      data: {}
+    };
 
-  tables.forEach(tableName => {
-    try {
-      exportData.data[tableName] = db.prepare(`SELECT * FROM ${tableName}`).all();
-    } catch (err) {
-      exportData.data[tableName] = [];
+    for (const tableName of tables) {
+      try {
+        exportData.data[tableName] = await db.prepare(`SELECT * FROM ${tableName}`).all();
+      } catch (err) {
+        exportData.data[tableName] = [];
+      }
     }
-  });
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', `attachment; filename=studio-gfx-export-${timestamp}.json`);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename=photoplanet-export-${timestamp}.json`);
 
-  logAudit(req.user, 'EXPORT_JSON', 'database', 'json', null, null, req.ip);
-
-  res.send(JSON.stringify(exportData, null, 2));
+    await logAudit(req.user, 'EXPORT_JSON', 'database', 'json', null, null, req.ip);
+    res.send(JSON.stringify(exportData, null, 2));
+  } catch (err) {
+    console.error('Export error:', err);
+    res.status(500).json({ error: 'Export failed: ' + err.message });
+  }
 });
 
-// Restore database from uploaded JSON or .db file
-router.post('/restore', upload.single('backupFile'), (req, res) => {
+// Restore database from uploaded JSON
+router.post('/restore', upload.single('backupFile'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Please upload a backup file.' });
   }
@@ -84,14 +104,16 @@ router.post('/restore', upload.single('backupFile'), (req, res) => {
       }
 
       // Perform restore in transaction
-      const transaction = db.transaction(() => {
+      await db.transaction(async (tx) => {
         // Clean existing tables in reverse foreign-key order
         const clearTables = [
           'quotation_payment_terms', 'quotation_items', 'quotation_events',
           'quotation_status_history', 'quotations', 'events', 'clients',
           'services', 'service_categories', 'event_types', 'quotation_sequence', 'settings'
         ];
-        clearTables.forEach(t => db.prepare(`DELETE FROM ${t}`).run());
+        for (const t of clearTables) {
+          await tx.prepare(`DELETE FROM ${t}`).run();
+        }
 
         // Restore each table
         for (const [table, rows] of Object.entries(parsed.data)) {
@@ -101,35 +123,22 @@ router.post('/restore', upload.single('backupFile'), (req, res) => {
           const sample = rows[0];
           const cols = Object.keys(sample);
           const placeholders = cols.map(() => '?').join(', ');
-          const insertStmt = db.prepare(`INSERT OR REPLACE INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`);
+          const insertStmt = tx.prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`);
 
-          rows.forEach(row => {
-            insertStmt.run(...cols.map(c => row[c]));
-          });
+          for (const row of rows) {
+            await insertStmt.run(...cols.map(c => row[c]));
+          }
         }
       });
 
-      transaction();
-      logAudit(req.user, 'RESTORE_JSON', 'database', 'json', null, { originalName }, req.ip);
+      await logAudit(req.user, 'RESTORE_JSON', 'database', 'json', null, { originalName }, req.ip);
 
       // Clean up uploaded file
-      fs.unlinkSync(uploadedPath);
+      if (fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);
       return res.json({ message: 'Database successfully restored from JSON backup.' });
-    } else if (originalName.endsWith('.db') || originalName.endsWith('.sqlite')) {
-      // Create emergency snapshot of current DB before replacement
-      const preRestoreBackup = path.join(DATA_DIR, `pre-restore-auto-${Date.now()}.db`);
-      fs.copyFileSync(DB_PATH, preRestoreBackup);
-
-      // Close current db WAL, copy new DB over
-      db.pragma('wal_checkpoint(TRUNCATE)');
-      fs.copyFileSync(uploadedPath, DB_PATH);
-      fs.unlinkSync(uploadedPath);
-
-      logAudit(req.user, 'RESTORE_DB', 'database', 'sqlite', { preRestoreBackup }, { originalName }, req.ip);
-      return res.json({ message: 'Database restored successfully from .db file. Server reloaded.' });
     } else {
-      fs.unlinkSync(uploadedPath);
-      return res.status(400).json({ error: 'Unsupported file format. Please upload a .db, .sqlite or .json file.' });
+      if (fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);
+      return res.status(400).json({ error: 'PostgreSQL database only supports JSON backup restore (.json file).' });
     }
   } catch (err) {
     if (fs.existsSync(uploadedPath)) fs.unlinkSync(uploadedPath);

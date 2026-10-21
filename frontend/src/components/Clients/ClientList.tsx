@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { ClientModal } from './ClientModal';
 import { ClientDetailModal } from './ClientDetailModal';
 import { DataTablePagination } from '../Common/DataTablePagination';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Search, 
@@ -28,7 +29,26 @@ export const ClientList: React.FC<ClientListProps> = ({
   onCreateQuotationForClient,
   onOpenQuotation
 }) => {
+  const navigate = useNavigate();
+
+  const handleCreateQuotationForClient = (client: Client) => {
+    if (onCreateQuotationForClient) {
+      onCreateQuotationForClient(client);
+    } else {
+      navigate(`/quotations/new?clientId=${client.id}`, { state: { client } });
+    }
+  };
+
+  const handleOpenQuotation = (quotationId: number) => {
+    if (onOpenQuotation) {
+      onOpenQuotation(quotationId);
+    } else {
+      navigate(`/quotations/${quotationId}`);
+    }
+  };
+
   const [clients, setClients] = useState<Client[]>([]);
+
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -205,19 +225,17 @@ export const ClientList: React.FC<ClientListProps> = ({
                   </span>
                 </div>
 
-                {onCreateQuotationForClient && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCreateQuotationForClient(client);
-                    }}
-                    className="p-1.5 rounded-lg bg-sky-950 hover:bg-sky-900 border border-sky-800/40 text-sky-300 text-xs font-medium flex items-center gap-1 transition-colors"
-                    title="Create Quotation for this Client"
-                  >
-                    <PlusCircle className="w-3.5 h-3.5" />
-                    <span>Quote</span>
-                  </button>
-                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCreateQuotationForClient(client);
+                  }}
+                  className="p-1.5 rounded-lg bg-sky-950 hover:bg-sky-900 border border-sky-800/40 text-sky-300 text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Create Quotation for this Client"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>Quote</span>
+                </button>
               </div>
             </div>
           ))}
@@ -253,13 +271,14 @@ export const ClientList: React.FC<ClientListProps> = ({
         onClose={() => setDetailClientId(null)}
         onOpenQuotation={(qId) => {
           setDetailClientId(null);
-          if (onOpenQuotation) onOpenQuotation(qId);
+          handleOpenQuotation(qId);
         }}
         onCreateQuotationForClient={(cl) => {
           setDetailClientId(null);
-          if (onCreateQuotationForClient) onCreateQuotationForClient(cl);
+          handleCreateQuotationForClient(cl);
         }}
       />
+
 
     </div>
   );

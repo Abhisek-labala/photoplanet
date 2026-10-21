@@ -1,12 +1,12 @@
 const { db } = require('../db');
 
-function logAudit(user, action, entity, entityId, oldValue, newValue, ip) {
+async function logAudit(user, action, entity, entityId, oldValue, newValue, ip) {
   try {
     const stmt = db.prepare(`
       INSERT INTO audit_logs (user_id, username, action, entity, entity_id, old_value, new_value, ip_address)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(
+    await stmt.run(
       user ? user.id : null,
       user ? user.username : 'SYSTEM',
       action,

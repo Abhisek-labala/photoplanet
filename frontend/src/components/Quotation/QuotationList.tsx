@@ -3,6 +3,7 @@ import type { Quotation } from '../../types';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { formatCurrency, formatDate, getStatusBadgeClass } from '../../utils/formatters';
+import { useNavigate } from 'react-router-dom';
 import { DataTablePagination } from '../Common/DataTablePagination';
 import { 
   FileText, 
@@ -18,9 +19,9 @@ import {
 } from 'lucide-react';
 
 interface QuotationListProps {
-  onOpenQuotation: (id: number) => void;
-  onEditQuotation: (id: number) => void;
-  onCreateNew: () => void;
+  onOpenQuotation?: (id: number) => void;
+  onEditQuotation?: (id: number) => void;
+  onCreateNew?: () => void;
 }
 
 export const QuotationList: React.FC<QuotationListProps> = ({
@@ -28,8 +29,24 @@ export const QuotationList: React.FC<QuotationListProps> = ({
   onEditQuotation,
   onCreateNew
 }) => {
-  const { settings } = useAuth();
+  const navigate = useNavigate();
+  const { settings, isAdmin } = useAuth();
   const currencySymbol = settings?.currency_symbol || '₹';
+
+  const handleOpen = (id: number) => {
+    if (onOpenQuotation) onOpenQuotation(id);
+    else navigate(`/quotations/${id}`);
+  };
+
+  const handleEdit = (id: number) => {
+    if (onEditQuotation) onEditQuotation(id);
+    else navigate(`/quotations/${id}/edit`);
+  };
+
+  const handleCreate = () => {
+    if (onCreateNew) onCreateNew();
+    else navigate('/quotations/new');
+  };
 
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [search, setSearch] = useState('');
@@ -76,12 +93,13 @@ export const QuotationList: React.FC<QuotationListProps> = ({
       try {
         const res = await api.duplicateQuotation(id);
         alert(res.message);
-        onEditQuotation(res.quotationId);
+        handleEdit(res.quotationId);
       } catch (err: any) {
         alert(err.message || 'Duplicate failed');
       }
     }
   };
+
 
   const handleArchive = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -116,15 +134,17 @@ export const QuotationList: React.FC<QuotationListProps> = ({
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
             <FileText className="w-6 h-6 text-sky-400" />
-            <span>Studio Quotations</span>
+            <span>{isAdmin ? 'Studio Quotations' : 'My Quotations'}</span>
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Search, manage, duplicate, print and track status of client quotations
+            {isAdmin 
+              ? 'Search, manage, duplicate, print and track status of all client quotations'
+              : 'Search, manage, duplicate, print and track status of quotations created by you'}
           </p>
         </div>
 
         <button
-          onClick={onCreateNew}
+          onClick={handleCreate}
           className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-sm shadow-lg shadow-sky-500/25 transition-all cursor-pointer min-h-[48px] self-start sm:self-auto"
         >
           <Plus className="w-5 h-5" />
@@ -198,7 +218,7 @@ export const QuotationList: React.FC<QuotationListProps> = ({
           {paginatedQuotations.map(q => (
             <div
               key={q.id}
-              onClick={() => onOpenQuotation(q.id)}
+              onClick={() => handleOpen(q.id)}
               className="bg-slate-900/80 hover:bg-slate-800/60 border border-slate-800 rounded-3xl p-4 sm:p-5 transition-all hover:border-slate-700 shadow-md cursor-pointer group flex flex-col sm:flex-row sm:items-center justify-between gap-4 active:scale-99"
             >
               <div className="space-y-1.5">
@@ -227,6 +247,14 @@ export const QuotationList: React.FC<QuotationListProps> = ({
                   <span className="text-slate-400">
                     {q.events_count || 1} Event{(q.events_count || 1) > 1 ? 's' : ''} • {q.items_count || 1} Service{(q.items_count || 1) > 1 ? 's' : ''}
                   </span>
+                  {q.created_by_name && (
+                    <>
+                      <span className="text-slate-500">•</span>
+                      <span className="text-slate-400 text-[11px] font-medium">
+                        by <span className="text-sky-300 font-semibold">{q.created_by_name}</span>
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -242,7 +270,7 @@ export const QuotationList: React.FC<QuotationListProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onOpenQuotation(q.id);
+                      handleOpen(q.id);
                     }}
                     className="p-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer min-w-[42px] min-h-[42px] flex items-center justify-center"
                     title="View Quotation"
@@ -253,7 +281,7 @@ export const QuotationList: React.FC<QuotationListProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onEditQuotation(q.id);
+                      handleEdit(q.id);
                     }}
                     className="p-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer min-w-[42px] min-h-[42px] flex items-center justify-center"
                     title="Edit Quotation"

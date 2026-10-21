@@ -18,23 +18,43 @@ import {
   Send,
   CalendarCheck
 } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { getQuotationPrintStyles } from '../../utils/printStyles';
 
 interface QuotationViewProps {
-  quotationId: number;
-  onBack: () => void;
-  onEdit: (id: number) => void;
+  quotationId?: number;
+  onBack?: () => void;
+  onEdit?: (id: number) => void;
   onDuplicateSuccess?: (newId: number) => void;
 }
 
 export const QuotationView: React.FC<QuotationViewProps> = ({
-  quotationId,
+  quotationId: propQuotationId,
   onBack,
   onEdit,
   onDuplicateSuccess
 }) => {
+  const { id: paramId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const quotationId = propQuotationId ?? (paramId ? Number(paramId) : 0);
+
+  const handleBack = () => {
+    if (onBack) onBack();
+    else navigate('/quotations');
+  };
+
+  const handleEditAction = (id: number) => {
+    if (onEdit) onEdit(id);
+    else navigate(`/quotations/${id}/edit`);
+  };
+
+  const handleDuplicateAction = (newId: number) => {
+    if (onDuplicateSuccess) onDuplicateSuccess(newId);
+    else navigate(`/quotations/${newId}`);
+  };
+
   const [data, setData] = useState<{
     quotation: Quotation;
     events: QuotationEvent[];
@@ -50,6 +70,10 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
 
   const fetchQuotation = async () => {
+    if (!quotationId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await api.getQuotation(quotationId);
@@ -64,6 +88,7 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
   useEffect(() => {
     fetchQuotation();
   }, [quotationId]);
+
 
   const handleDownloadPdf = async () => {
     if (!data) return;
@@ -343,16 +368,13 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
       try {
         const res = await api.duplicateQuotation(quotationId);
         alert(res.message);
-        if (onDuplicateSuccess) {
-          onDuplicateSuccess(res.quotationId);
-        } else {
-          onEdit(res.quotationId);
-        }
+        handleDuplicateAction(res.quotationId);
       } catch (err: any) {
         alert(err.message || 'Duplicate failed');
       }
     }
   };
+
 
   const handleStatusChange = async (newStatus: string) => {
     setUpdatingStatus(true);
@@ -417,6 +439,7 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
     const q = data.quotation;
     const s = data.settings;
     const eventsList = data.events.map((e, i) => `• Event ${i + 1}: ${e.event_type} on ${formatDate(e.event_date)}${e.venue ? ` at ${e.venue}` : ''}`).join('\n');
+    const quoteUrl = `${window.location.origin}/quotations/${q.id}`;
 
     return `*${(s?.studio_name || 'STUDIO PHOTOGRAPHY').toUpperCase()} - QUOTATION*\n\n` +
       `Dear ${q.client_name},\n` +
@@ -426,6 +449,7 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
       `*Events Covered:*\n${eventsList}\n\n` +
       `💰 *Total Amount:* *${formatCurrency(q.grand_total, s?.currency_symbol || '₹')}*\n\n` +
       (s?.phone ? `📞 Contact: ${s.phone}\n` : '') +
+      `🔗 View Online: ${quoteUrl}\n\n` +
       `Thank you!`;
   };
 
@@ -435,12 +459,13 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
 
   const handleNativeShare = async () => {
     if (!data) return;
+    const quoteUrl = `${window.location.origin}/quotations/${data.quotation.id}`;
     try {
       if (navigator.share) {
         await navigator.share({
           title: `Quotation ${data.quotation.quotation_number} - ${data.settings?.studio_name || 'Studio'}`,
           text: getQuotationSummaryText(),
-          url: window.location.href
+          url: quoteUrl
         });
       } else {
         await handleCopySummary();
@@ -478,17 +503,38 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
   };
 
   const handleCopyLink = async () => {
-    const success = await copyToClipboard(window.location.href);
+    const quoteUrl = `${window.location.origin}/quotations/${quotationId}`;
+    const success = await copyToClipboard(quoteUrl);
     if (success) {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2500);
     }
   };
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <div className="py-24 text-center text-slate-400 text-sm">
-        Loading quotation details...
+        <Loader2 className="w-8 h-8 text-sky-400 animate-spin mx-auto mb-3" />
+        <p>Loading quotation #{quotationId} details...</p>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="py-24 text-center text-slate-400 text-sm space-y-4 max-w-md mx-auto">
+        <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl">
+          <p className="text-base font-bold text-white mb-1">Quotation Not Found</p>
+          <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+            The quotation #{quotationId} does not exist, or you do not have permission to view it.
+          </p>
+          <button
+            onClick={handleBack}
+            className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs cursor-pointer shadow-md transition-colors"
+          >
+            Back to Quotations
+          </button>
+        </div>
       </div>
     );
   }
@@ -502,7 +548,7 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
       {/* Action Toolbar (Hidden during print) */}
       <div className="no-print bg-slate-900 border border-slate-800 rounded-3xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 shadow-xl">
         <button
-          onClick={onBack}
+          onClick={handleBack}
           className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer min-h-[44px]"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -558,12 +604,13 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
           )}
 
           <button
-            onClick={() => onEdit(quotation.id)}
+            onClick={() => handleEditAction(quotation.id)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition-colors cursor-pointer min-h-[44px]"
           >
             <Edit3 className="w-3.5 h-3.5 text-sky-400" />
             <span className="hidden sm:inline">Edit</span>
           </button>
+
 
           <button
             onClick={handleShare}

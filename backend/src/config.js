@@ -1,14 +1,27 @@
 const path = require('path');
-require('dotenv').config();
+const dotenv = require('dotenv');
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
-const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'studio-gfx.db');
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+dotenv.config();
+
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'studio-gfx-super-secure-offline-jwt-key-2026';
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.cwd(), process.env.DATA_DIR)
+  : path.join(__dirname, '..', '..', 'data');
+const DB_PATH = process.env.DB_PATH
+  ? path.resolve(process.cwd(), process.env.DB_PATH)
+  : path.join(DATA_DIR, 'studio-gfx.db');
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+
+const DATABASE_URL = process.env.DATABASE_URL || null;
 
 module.exports = {
+  PORT,
   DATA_DIR,
   DB_PATH,
-  PORT,
-  JWT_SECRET
+  DATABASE_URL,
+  JWT_SECRET,
+  JWT_EXPIRES_IN
 };

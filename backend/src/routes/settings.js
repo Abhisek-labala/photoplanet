@@ -5,8 +5,8 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 
 // Public settings (branding, studio name, tagline, currency) for login screen & PWA shell
-router.get('/public', (req, res) => {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
+router.get('/public', async (req, res) => {
+  const rows = await db.prepare('SELECT key, value FROM settings').all();
   const settings = {};
   rows.forEach(r => {
     try {
@@ -32,8 +32,8 @@ router.get('/public', (req, res) => {
 router.use(authenticateToken);
 
 // Get all settings (authenticated)
-router.get('/', (req, res) => {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
+router.get('/', async (req, res) => {
+  const rows = await db.prepare('SELECT key, value FROM settings').all();
   const settings = {};
   rows.forEach(r => {
     try {
@@ -46,27 +46,24 @@ router.get('/', (req, res) => {
 });
 
 // Update settings (Admin only)
-router.put('/', requireAdmin, (req, res) => {
+router.put('/', requireAdmin, async (req, res) => {
   const updateData = req.body;
   if (!updateData || typeof updateData !== 'object') {
     return res.status(400).json({ error: 'Valid settings object is required.' });
   }
 
-  const transaction = db.transaction(() => {
-    const upsert = db.prepare(`
-      INSERT INTO settings (key, value)
-      VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `);
-
+  await db.transaction(async (tx) => {
     for (const [key, val] of Object.entries(updateData)) {
       const serialized = typeof val === 'object' ? JSON.stringify(val) : String(val);
-      upsert.run(key, serialized);
+      await tx.prepare(`
+        INSERT INTO settings (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(key, serialized);
     }
   });
 
-  transaction();
-  logAudit(req.user, 'UPDATE_SETTINGS', 'settings', 'global', null, updateData, req.ip);
+  await logAudit(req.user, 'UPDATE_SETTINGS', 'settings', 'global', null, updateData, req.ip);
 
   res.json({ message: 'Studio settings updated successfully' });
 });

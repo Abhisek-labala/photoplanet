@@ -18,13 +18,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health and Network Info
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
   try {
-    const row = db.prepare('SELECT 1 as alive').get();
+    const row = await db.prepare('SELECT 1 as alive').get();
     res.json({
-      status: 'connected',
-      server: 'Studio GFX Quotation Local Server',
-      database: row.alive === 1 ? 'connected' : 'error',
+      status: 'ok',
+      server: 'Photo Planet Studio Quotation Server',
+      database: row && Number(row.alive) === 1 ? 'connected' : 'error',
+      engine: 'PostgreSQL',
       timestamp: new Date().toISOString()
     });
   } catch (err) {

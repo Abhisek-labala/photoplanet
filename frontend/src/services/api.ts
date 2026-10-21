@@ -40,12 +40,14 @@ export async function apiRequest<T = any>(endpoint: string, options: RequestInit
 
 export const api = {
   // Health & Network
-  checkHealth: () => fetch('/api/health').then(r => r.json()),
+  checkHealth: () => fetch(`${API_BASE}/health`).then(r => r.json()),
   getNetworkInfo: () => apiRequest('/network-info'),
 
   // Auth
   login: (credentials: { username: string; password: string }) => 
     apiRequest('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
+  forgotPassword: (data: { username: string; mobile: string; newPassword: string }) =>
+    apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify(data) }),
   getProfile: () => apiRequest('/auth/me'),
   logout: () => apiRequest('/auth/logout', { method: 'POST' }),
   changePassword: (data: any) => apiRequest('/auth/change-password', { method: 'PUT', body: JSON.stringify(data) }),
@@ -125,7 +127,7 @@ export const api = {
   deleteQuotation: (id: number) => apiRequest(`/quotations/${id}`, { method: 'DELETE' }),
   getQuotationPdfBlob: async (id: number): Promise<Blob> => {
     const token = localStorage.getItem('studio_token');
-    const res = await fetch(`/api/quotations/${id}/pdf`, {
+    const res = await fetch(`${API_BASE}/quotations/${id}/pdf`, {
       headers: {
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       }
@@ -137,11 +139,11 @@ export const api = {
   },
   getQuotationPdfUrl: (id: number) => {
     const token = localStorage.getItem('studio_token') || '';
-    return `/api/quotations/${id}/pdf?token=${encodeURIComponent(token)}`;
+    return `${API_BASE}/quotations/${id}/pdf?token=${encodeURIComponent(token)}`;
   },
 
   // Settings
-  getPublicSettings: () => fetch('/api/settings/public').then(r => r.json()),
+  getPublicSettings: () => fetch(`${API_BASE}/settings/public`).then(r => r.json()),
   getSettings: () => apiRequest('/settings'),
   updateSettings: (data: any) => apiRequest('/settings', { method: 'PUT', body: JSON.stringify(data) }),
 

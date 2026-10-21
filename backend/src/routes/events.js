@@ -7,7 +7,7 @@ const { logAudit } = require('../middleware/audit');
 router.use(authenticateToken);
 
 // List events with filter
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { clientId, status, upcoming, search } = req.query;
   let query = `
     SELECT e.*, c.name as client_name, c.mobile as client_mobile, c.client_code, et.name as event_type_name
@@ -42,14 +42,14 @@ router.get('/', (req, res) => {
 
   query += ' ORDER BY e.event_date ASC';
 
-  const events = db.prepare(query).all(...params);
+  const events = await db.prepare(query).all(...params);
   res.json({ events });
 });
 
 // Get single event
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   const { id } = req.params;
-  const event = db.prepare(`
+  const event = await db.prepare(`
     SELECT e.*, c.name as client_name, c.mobile as client_mobile, c.client_code, et.name as event_type_name
     FROM events e
     JOIN clients c ON e.client_id = c.id
@@ -61,20 +61,25 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ error: 'Event not found.' });
   }
 
-  // Also fetch related quotations
-  const quotations = db.prepare(`
+  // Also fetch related quotations (scoped to user if non-admin)
+  let quotationsQuery = `
     SELECT q.* FROM quotations q
     JOIN quotation_events qe ON qe.quotation_id = q.id
     WHERE qe.event_id = ?
-    GROUP BY q.id
-    ORDER BY q.created_at DESC
-  `).all(id);
+  `;
+  const qParams = [id];
+  if (req.user.role !== 'ADMIN') {
+    quotationsQuery += ' AND q.created_by = ?';
+    qParams.push(req.user.id);
+  }
+  quotationsQuery += ' GROUP BY q.id ORDER BY q.created_at DESC';
+  const quotations = await db.prepare(quotationsQuery).all(...qParams);
 
   res.json({ event, quotations });
 });
 
 // Create event
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const {
     client_id, event_type_id, event_name, event_date, end_date,
     venue, city, requirements, special_instructions, notes, status
@@ -90,7 +95,7 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'Event name is required.' });
   }
 
-  const client = db.prepare('SELECT id FROM clients WHERE id = ?').get(client_id);
+  const client = await db.prepare('SELECT id FROM clients WHERE id = ?').get(client_id);
   if (!client) {
     return res.status(400).json({ error: 'Selected client does not exist.' });
   }
@@ -102,7 +107,7 @@ router.post('/', (req, res) => {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const result = insert.run(
+  const result = await insert.run(
     client_id,
     event_type_id || null,
     event_name.trim(),
@@ -116,8 +121,8 @@ router.post('/', (req, res) => {
     status || 'Enquiry'
   );
 
-  const newEvent = db.prepare('SELECT * FROM events WHERE id = ?').get(result.lastInsertRowid);
-  logAudit(req.user, 'CREATE_EVENT', 'events', result.lastInsertRowid, null, newEvent, req.ip);
+  const newEvent = await db.prepare('SELECT * FROM events WHERE id = ?').get(result.lastInsertRowid);
+  await logAudit(req.user, 'CREATE_EVENT', 'events', result.lastInsertRowid, null, newEvent, req.ip);
 
   res.status(201).json({
     message: 'Event created successfully',
@@ -126,19 +131,19 @@ router.post('/', (req, res) => {
 });
 
 // Update event
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const {
     event_type_id, event_name, event_date, end_date,
     venue, city, requirements, special_instructions, notes, status
   } = req.body;
 
-  const existing = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+  const existing = await db.prepare('SELECT * FROM events WHERE id = ?').get(id);
   if (!existing) {
     return res.status(404).json({ error: 'Event not found.' });
   }
 
-  db.prepare(`
+  await db.prepare(`
     UPDATE events SET
       event_type_id = ?,
       event_name = ?,
@@ -166,22 +171,22 @@ router.put('/:id', (req, res) => {
     id
   );
 
-  const updated = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
-  logAudit(req.user, 'UPDATE_EVENT', 'events', id, existing, updated, req.ip);
+  const updated = await db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+  await logAudit(req.user, 'UPDATE_EVENT', 'events', id, existing, updated, req.ip);
 
   res.json({ message: 'Event updated successfully', event: updated });
 });
 
 // Delete event
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   const { id } = req.params;
-  const existing = db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+  const existing = await db.prepare('SELECT * FROM events WHERE id = ?').get(id);
   if (!existing) {
     return res.status(404).json({ error: 'Event not found.' });
   }
 
-  db.prepare('DELETE FROM events WHERE id = ?').run(id);
-  logAudit(req.user, 'DELETE_EVENT', 'events', id, existing, null, req.ip);
+  await db.prepare('DELETE FROM events WHERE id = ?').run(id);
+  await logAudit(req.user, 'DELETE_EVENT', 'events', id, existing, null, req.ip);
   res.json({ message: 'Event deleted successfully' });
 });
 

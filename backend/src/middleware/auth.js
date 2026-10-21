@@ -13,19 +13,23 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Access token required. Please log in.' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
     if (err) {
       return res.status(403).json({ error: 'Session expired or invalid token. Please log in again.' });
     }
 
-    // Verify user is still active in database
-    const user = db.prepare('SELECT id, name, username, role, active FROM users WHERE id = ?').get(decoded.id);
-    if (!user || !user.active) {
-      return res.status(403).json({ error: 'User account is inactive or no longer exists.' });
-    }
+    try {
+      // Verify user is still active in database
+      const user = await db.prepare('SELECT id, name, username, role, active FROM users WHERE id = ?').get(decoded.id);
+      if (!user || !user.active) {
+        return res.status(403).json({ error: 'User account is inactive or no longer exists.' });
+      }
 
-    req.user = user;
-    next();
+      req.user = user;
+      next();
+    } catch (dbErr) {
+      return res.status(500).json({ error: 'Authentication database error', message: dbErr.message });
+    }
   });
 }
 

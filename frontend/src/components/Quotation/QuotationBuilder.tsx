@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import type {
   Client,
   ServiceCategory,
@@ -28,23 +29,43 @@ import {
 interface QuotationBuilderProps {
   editQuotationId?: number | null;
   initialClient?: Client | null;
-  onSaved: (quotationId: number) => void;
-  onCancel: () => void;
+  onSaved?: (quotationId: number) => void;
+  onCancel?: () => void;
 }
 
 const AUTOSAVE_KEY = 'studio_gfx_quotation_draft';
 
 export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
-  editQuotationId,
+  editQuotationId: propEditQuotationId,
   initialClient,
   onSaved,
   onCancel
 }) => {
+  const { id: paramId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  const editQuotationId = propEditQuotationId ?? (paramId ? Number(paramId) : null);
+  const locationClient = (location.state as any)?.client as Client | undefined;
+  const initialClientResolved = initialClient || locationClient || null;
+
+  const handleSavedAction = (savedId: number) => {
+    if (onSaved) onSaved(savedId);
+    else navigate(`/quotations/${savedId}`);
+  };
+
+  const handleCancelAction = () => {
+    if (onCancel) onCancel();
+    else navigate('/quotations');
+  };
+
   const { settings } = useAuth();
   const currencySymbol = settings?.currency_symbol || '₹';
 
   const [clients, setClients] = useState<Client[]>([]);
-  const [selectedClient, setSelectedClient] = useState<Client | null>(initialClient || null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(initialClientResolved);
+
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
@@ -92,10 +113,21 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
       api.getEventTypes(),
       api.getSettings()
     ]).then(([clientsRes, servicesRes, eventTypesRes, settingsRes]) => {
-      setClients(clientsRes.clients || []);
+      const loadedClients = clientsRes.clients || [];
+      setClients(loadedClients);
       setCategories(servicesRes.categories || []);
       const loadedEventTypes = eventTypesRes.eventTypes || [];
       setEventTypes(loadedEventTypes);
+
+      // Preselect client from query param if provided (?clientId=123)
+      const urlClientId = searchParams.get('clientId');
+      if (!selectedClient && urlClientId && loadedClients.length > 0) {
+        const matched = loadedClients.find((c: Client) => String(c.id) === urlClientId);
+        if (matched) {
+          setSelectedClient(matched);
+        }
+      }
+
 
       const st = settingsRes.settings || settings;
       if (st) {
@@ -366,11 +398,11 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
       if (editQuotationId) {
         await api.updateQuotation(editQuotationId, payload);
         localStorage.removeItem(AUTOSAVE_KEY);
-        onSaved(editQuotationId);
+        handleSavedAction(editQuotationId);
       } else {
         const res = await api.createQuotation(payload);
         localStorage.removeItem(AUTOSAVE_KEY);
-        onSaved(res.quotationId);
+        handleSavedAction(res.quotationId);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to save quotation');
@@ -434,11 +466,12 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
 
         <div className="flex items-center gap-2.5 self-start sm:self-auto">
           <button
-            onClick={onCancel}
+            onClick={handleCancelAction}
             className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer min-h-[44px]"
           >
             Cancel
           </button>
+
           <button
             onClick={handleSave}
             disabled={loading}

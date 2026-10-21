@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { formatCurrency, formatDate, getStatusBadgeClass } from '../../utils/formatters';
@@ -11,9 +12,9 @@ import {
 } from 'lucide-react';
 
 interface DashboardViewProps {
-  onNavigate: (tab: any) => void;
-  onOpenQuotation: (id: number) => void;
-  onCreateQuotation: () => void;
+  onNavigate?: (tab: any) => void;
+  onOpenQuotation?: (id: number) => void;
+  onCreateQuotation?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -21,9 +22,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenQuotation,
   onCreateQuotation
 }) => {
+  const navigate = useNavigate();
   const { user, isAdmin, settings } = useAuth();
   const currencySymbol = settings?.currency_symbol || '₹';
   const studioName = settings?.studio_name || 'Studio';
+
+  const handleCreate = () => {
+    if (onCreateQuotation) onCreateQuotation();
+    else navigate('/quotations/new');
+  };
+
+  const handleOpen = (id: number) => {
+    if (onOpenQuotation) onOpenQuotation(id);
+    else navigate(`/quotations/${id}`);
+  };
+
+  const handleNav = (tab: string) => {
+    if (onNavigate) onNavigate(tab);
+    else if (tab === 'quotations') navigate('/quotations');
+    else if (tab === 'events') navigate('/events');
+    else navigate(`/${tab}`);
+  };
+
 
   const [metrics, setMetrics] = useState<any>(null);
   const [recentQuotes, setRecentQuotes] = useState<Quotation[]>([]);
@@ -69,7 +89,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <button
-            onClick={onCreateQuotation}
+            onClick={handleCreate}
             className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-sm shadow-xl shadow-sky-500/30 transition-all cursor-pointer self-start sm:self-auto shrink-0 min-h-[48px]"
           >
             <FilePlus className="w-5 h-5" />
@@ -144,7 +164,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Recent Studio Quotations</span>
             </h3>
             <button
-              onClick={() => onNavigate('quotations')}
+              onClick={() => handleNav('quotations')}
               className="text-xs text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 p-1 cursor-pointer"
             >
               <span>View All</span>
@@ -161,7 +181,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {recentQuotes.map(q => (
                 <div
                   key={q.id}
-                  onClick={() => onOpenQuotation(q.id)}
+                  onClick={() => handleOpen(q.id)}
                   className="p-3.5 bg-slate-950/80 hover:bg-slate-800/60 border border-slate-800 rounded-2xl flex items-center justify-between transition-colors cursor-pointer group active:scale-99"
                 >
                   <div>
@@ -203,7 +223,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Upcoming Photography Events</span>
             </h3>
             <button
-              onClick={() => onNavigate('events')}
+              onClick={() => handleNav('events')}
               className="text-xs text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 p-1 cursor-pointer"
             >
               <span>Schedule</span>
