@@ -1,0 +1,26 @@
+{
+  "name": "studio-photo-planet-quotation-pwa",
+  "version": "1.0.0",
+  "description": "PHOTO PLANET STUDIO - Offline-First Quotation Management PWA & Local Server",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "server": "node backend/server.js",
+    "build": "npm run build --prefix frontend",
+    "dev:backend": "node backend/server.js",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "test": "node tests/api.test.js",
+    "postinstall": "npm install --prefix backend && npm install --prefix frontend"
+  },
+  "keywords": [
+    "pwa",
+    "quotation",
+    "photography",
+    "studio",
+    "offline-first",
+    "sqlite",
+    "react"
+  ],
+  "author": "PHOTO PLANET STUDIO",
+  "license": "ISC"
+}
