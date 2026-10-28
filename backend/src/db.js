@@ -166,6 +166,14 @@ async function getNextClientCode() {
 
 console.log('[PostgreSQL] Database module initialized. Connected to:', pgUrl.replace(/:[^:@]+@/, ':****@'));
 
+// Ensure two_factor columns exist in users table
+pool.query(`
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER DEFAULT 0;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT DEFAULT NULL;
+`).catch(err => {
+  console.warn('[PostgreSQL] Schema migration warning for 2FA columns:', err.message);
+});
+
 module.exports = {
   db,
   pool,

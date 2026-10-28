@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { TwoFactorSetupModal } from '../Auth/TwoFactorSetupModal';
 import { 
   LogOut, 
   User as UserIcon, 
   ShieldCheck, 
+  Shield,
   Menu,
   Download
 } from 'lucide-react';
@@ -20,6 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, title }) => {
   const navigate = useNavigate();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [show2FAModal, setShow2FAModal] = useState(false);
 
   const getPageTitle = (): string => {
     if (title) return title;
@@ -52,6 +55,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, title }) => {
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
+
+  useEffect(() => {
+    setShow2FAModal(false);
+  }, [location.pathname]);
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -127,8 +134,24 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, title }) => {
             </button>
           )}
 
-          {/* User badge & Logout */}
+          {/* User badge & 2FA & Logout */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* 2FA Security Button */}
+            <button
+              onClick={() => setShow2FAModal(true)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs transition-colors cursor-pointer min-h-[36px] ${
+                user?.two_factor_enabled
+                  ? 'bg-emerald-950/50 hover:bg-emerald-950/80 border-emerald-800/60 text-emerald-300'
+                  : 'bg-slate-800/80 hover:bg-slate-700/80 border-slate-700 text-slate-300'
+              }`}
+              title={user?.two_factor_enabled ? 'Google Authenticator Active (Click to manage)' : 'Set up Google Authenticator (TOTP)'}
+            >
+              <ShieldCheck className={`w-3.5 h-3.5 ${user?.two_factor_enabled ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline font-semibold text-[11px]">
+                {user?.two_factor_enabled ? '2FA Active' : '2FA Setup'}
+              </span>
+            </button>
+
             <div className="hidden md:flex flex-col text-right">
               <span className="text-xs font-semibold text-slate-200">{user?.name}</span>
               <span className="text-[10px] uppercase tracking-wider text-slate-400 flex items-center justify-end gap-1">
@@ -154,6 +177,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, title }) => {
         </div>
 
       </div>
+
+      {/* Google Authenticator Setup & Management Modal */}
+      <TwoFactorSetupModal
+        isOpen={show2FAModal}
+        onClose={() => setShow2FAModal(false)}
+      />
     </header>
   );
 };

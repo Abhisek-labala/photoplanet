@@ -1,8 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { Lock, User, AlertCircle, Eye, EyeOff, KeyRound, Phone, CheckCircle2, X } from 'lucide-react';
+import { 
+  Lock, 
+  User, 
+  AlertCircle, 
+  Eye, 
+  EyeOff, 
+  KeyRound, 
+  Phone, 
+  CheckCircle2, 
+  X, 
+  ShieldCheck, 
+  ArrowLeft, 
+  Loader2 
+} from 'lucide-react';
 
 export const LoginView: React.FC = () => {
   const { login, settings, isAuthenticated } = useAuth();
@@ -15,6 +28,14 @@ export const LoginView: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Google Authenticator 2FA state
+  const [is2faRequired, setIs2faRequired] = useState(false);
+  const [tempToken, setTempToken] = useState<string | null>(null);
+  const [tempUser, setTempUser] = useState<{ id: number; name: string; username: string } | null>(null);
+  const [totpCode, setTotpCode] = useState('');
+  const [totpLoading, setTotpLoading] = useState(false);
+  const totpInputRef = useRef<HTMLInputElement>(null);
 
   // Forgot password modal state
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -33,6 +54,12 @@ export const LoginView: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  useEffect(() => {
+    if (is2faRequired) {
+      totpInputRef.current?.focus();
+    }
+  }, [is2faRequired]);
+
   const studioName = settings?.studio_name || 'STUDIO PHOTOGRAPHY';
   const tagline = settings?.tagline || 'Quotation Management System • Cloud Platform';
 
@@ -48,6 +75,17 @@ export const LoginView: React.FC = () => {
 
     try {
       const res = await api.login({ username: username.trim(), password });
+      
+      // If 2FA is required for this account
+      if (res.require2fa) {
+        setIs2faRequired(true);
+        setTempToken(res.tempToken);
+        setTempUser(res.user);
+        setTotpCode('');
+        setError(null);
+        return;
+      }
+
       login(res.token, res.user);
       navigate(from, { replace: true });
     } catch (err: any) {
@@ -55,6 +93,50 @@ export const LoginView: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerify2FA = async (e?: React.FormEvent, directCode?: string) => {
+    if (e) e.preventDefault();
+    const codeToVerify = directCode || totpCode;
+    const clean = codeToVerify.replace(/\D/g, '').slice(0, 6);
+
+    if (!tempToken || clean.length < 6) {
+      setError('Please enter the full 6-digit Google Authenticator code.');
+      return;
+    }
+
+    setTotpLoading(true);
+    setError(null);
+
+    try {
+      const res = await api.verify2FA({
+        tempToken,
+        code: clean
+      });
+      login(res.token, res.user);
+      navigate(from, { replace: true });
+    } catch (err: any) {
+      setError(err.message || 'Invalid authenticator code. Please check your app.');
+    } finally {
+      setTotpLoading(false);
+    }
+  };
+
+  const handleTotpCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setTotpCode(val);
+    setError(null);
+    if (val.length === 6) {
+      handleVerify2FA(undefined, val);
+    }
+  };
+
+  const handleBackToLogin = () => {
+    setIs2faRequired(false);
+    setTempToken(null);
+    setTempUser(null);
+    setTotpCode('');
+    setError(null);
   };
 
   const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
@@ -132,78 +214,155 @@ export const LoginView: React.FC = () => {
         </div>
 
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
-          <h2 className="text-base sm:text-lg font-bold text-white mb-1">Sign In</h2>
-          <p className="text-xs text-slate-400 mb-5">Enter your studio credentials to access quotations</p>
+          {is2faRequired ? (
+            /* Google Authenticator 2FA Verification Card */
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-white">Google Authenticator</h2>
+                  <p className="text-xs text-slate-400">Two-Factor Authentication</p>
+                </div>
+              </div>
 
-          {error && (
-            <div className="mb-5 p-3.5 rounded-2xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs flex items-center gap-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-              <span>{error}</span>
+              <div className="mb-5 p-3 rounded-2xl bg-slate-950/80 border border-slate-800/80 text-xs text-slate-300">
+                Signing in as <span className="font-bold text-white">{tempUser?.name || tempUser?.username}</span>. Enter the 6-digit code shown in your Google Authenticator app:
+              </div>
+
+              {error && (
+                <div className="mb-5 p-3.5 rounded-2xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs flex items-center gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <form onSubmit={(e) => handleVerify2FA(e)} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 text-center">
+                    6-Digit Verification Code
+                  </label>
+                  <input
+                    ref={totpInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    value={totpCode}
+                    onChange={handleTotpCodeChange}
+                    placeholder="000 000"
+                    className="w-full py-3.5 px-4 text-center tracking-[0.4em] font-mono text-2xl font-bold bg-slate-950 border border-slate-800 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-h-[52px]"
+                    required
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-slate-500 text-center mt-1.5">
+                    Code automatically verifies once 6 digits are typed or pasted
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={totpLoading || totpCode.length < 6}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 font-bold text-sm text-white shadow-lg shadow-sky-500/25 transition-all cursor-pointer disabled:opacity-50 min-h-[48px] flex items-center justify-center gap-2"
+                >
+                  {totpLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{totpLoading ? 'Verifying Code...' : 'Verify & Sign In'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleBackToLogin}
+                  className="w-full py-2.5 px-4 rounded-2xl border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800/60 font-semibold text-xs transition-colors cursor-pointer min-h-[40px] flex items-center justify-center gap-2"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back to Credentials</span>
+                </button>
+              </form>
+
+              <div className="mt-5 pt-4 border-t border-slate-800 text-center">
+                <p className="text-[11px] text-slate-500">
+                  Lost device? Studio administrator can reset your 2FA in Staff Management.
+                </p>
+              </div>
+            </div>
+          ) : (
+            /* Regular Sign In Form */
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-white mb-1">Sign In</h2>
+              <p className="text-xs text-slate-400 mb-5">Enter your studio credentials to access quotations</p>
+
+              {error && (
+                <div className="mb-5 p-3.5 rounded-2xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs flex items-center gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Username
+                  </label>
+                  <div className="relative">
+                    <User className="w-5 h-5 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="Enter your username"
+                      className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-h-[48px]"
+                      required
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-300">
+                      Password
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(true)}
+                      className="text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Lock className="w-5 h-5 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      className="w-full pl-11 pr-11 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-h-[48px]"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-2 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 font-bold text-sm text-white shadow-lg shadow-sky-500/25 transition-all cursor-pointer disabled:opacity-50 min-h-[48px] flex items-center justify-center"
+                >
+                  {loading ? 'Authenticating...' : 'Sign In'}
+                </button>
+              </form>
             </div>
           )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Username
-              </label>
-              <div className="relative">
-                <User className="w-5 h-5 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your username"
-                  className="w-full pl-11 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-h-[48px]"
-                  required
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-300">
-                  Password
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowForgotModal(true)}
-                  className="text-xs font-semibold text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
-                >
-                  Forgot Password?
-                </button>
-              </div>
-              <div className="relative">
-                <Lock className="w-5 h-5 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="w-full pl-11 pr-11 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors min-h-[48px]"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-2 min-w-[36px] min-h-[36px] flex items-center justify-center cursor-pointer"
-                  aria-label="Toggle password visibility"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 font-bold text-sm text-white shadow-lg shadow-sky-500/25 transition-all cursor-pointer disabled:opacity-50 min-h-[48px] flex items-center justify-center"
-            >
-              {loading ? 'Authenticating...' : 'Sign In'}
-            </button>
-          </form>
-
         </div>
 
         <div className="text-center mt-6 text-xs text-slate-500">

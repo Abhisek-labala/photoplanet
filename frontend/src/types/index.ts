@@ -7,7 +7,9 @@ export interface User {
   mobile?: string;
   role: UserRole;
   active: number;
+  two_factor_enabled?: number;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface Client {

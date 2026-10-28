@@ -46,6 +46,14 @@ export const api = {
   // Auth
   login: (credentials: { username: string; password: string }) => 
     apiRequest('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
+  verify2FA: (data: { tempToken: string; code: string }) =>
+    apiRequest('/auth/verify-2fa', { method: 'POST', body: JSON.stringify(data) }),
+  setup2FA: () =>
+    apiRequest<{ secret: string; qrCode: string; otpauth: string }>('/auth/2fa/setup', { method: 'POST' }),
+  enable2FA: (data: { secret: string; code: string }) =>
+    apiRequest('/auth/2fa/enable', { method: 'POST', body: JSON.stringify(data) }),
+  disable2FA: (data: { password?: string; code?: string }) =>
+    apiRequest('/auth/2fa/disable', { method: 'POST', body: JSON.stringify(data) }),
   forgotPassword: (data: { username: string; mobile: string; newPassword: string }) =>
     apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify(data) }),
   getProfile: () => apiRequest('/auth/me'),
@@ -57,6 +65,7 @@ export const api = {
   createUser: (data: any) => apiRequest('/users', { method: 'POST', body: JSON.stringify(data) }),
   updateUser: (id: number, data: any) => apiRequest(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteUser: (id: number) => apiRequest(`/users/${id}`, { method: 'DELETE' }),
+  resetUser2FA: (id: number) => apiRequest(`/users/${id}/reset-2fa`, { method: 'POST' }),
 
   // Clients
   getClients: (params?: { search?: string; includeArchived?: boolean }) => {

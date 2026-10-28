@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { User } from '../../types';
 import { api } from '../../services/api';
-import { UserCheck, UserPlus, Shield, Camera, Lock, Edit2, Trash2, X } from 'lucide-react';
+import { UserCheck, UserPlus, Shield, ShieldCheck, Camera, Lock, Edit2, Trash2, X, KeyRound } from 'lucide-react';
 import { DataTablePagination } from '../Common/DataTablePagination';
 
 export const UserManagement: React.FC = () => {
@@ -82,6 +82,21 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const handleReset2FA = async (u: User) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to reset Google Authenticator for "${u.name}" (@${u.username})?\n\nThey will be able to sign in with their password only, and can set up Google Authenticator again when ready.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await api.resetUser2FA(u.id);
+      alert(res.message || 'Google Authenticator reset successfully.');
+      fetchUsers();
+    } catch (err: any) {
+      alert(err.message || 'Failed to reset Google Authenticator.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       
@@ -137,13 +152,25 @@ export const UserManagement: React.FC = () => {
                   </div>
 
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-bold text-white text-sm">{u.name}</h3>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
                         u.role === 'ADMIN' ? 'bg-sky-950/60 text-sky-400 border-sky-800/50' : 'bg-purple-950/60 text-purple-400 border-purple-800/50'
                       }`}>
                         {u.role === 'ADMIN' ? 'Admin' : 'Quotation Staff'}
                       </span>
+
+                      {/* 2FA Badge */}
+                      {u.two_factor_enabled === 1 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">
+                          <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                          2FA ACTIVE
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 border border-slate-800 px-2 py-0.5 rounded-full">
+                          2FA OFF
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-slate-400 font-mono mt-1">
                       Username: @{u.username}
@@ -156,7 +183,18 @@ export const UserManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  {/* Reset 2FA button if enabled */}
+                  {u.two_factor_enabled === 1 && (
+                    <button
+                      onClick={() => handleReset2FA(u)}
+                      className="p-2 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 border border-amber-900/50 min-w-[38px] min-h-[38px] flex items-center justify-center cursor-pointer"
+                      title="Reset Google Authenticator (User lost device)"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                    </button>
+                  )}
+
                   <button
                     onClick={() => handleToggleActive(u)}
                     className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border min-h-[38px] cursor-pointer ${

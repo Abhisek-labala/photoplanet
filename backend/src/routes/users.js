@@ -11,11 +11,11 @@ router.use(requireAdmin);
 // List users
 router.get('/', async (req, res) => {
   const users = await db.prepare(`
-    SELECT id, name, username, mobile, role, active, created_at, updated_at
+    SELECT id, name, username, mobile, role, active, two_factor_enabled, created_at, updated_at
     FROM users
     ORDER BY role ASC, name ASC
   `).all();
-  res.json({ users });
+  res.json({ users: users.map(u => ({ ...u, two_factor_enabled: Number(u.two_factor_enabled || 0) })) });
 });
 
 // Create new user
@@ -104,6 +104,20 @@ router.delete('/:id', async (req, res) => {
   await logAudit(req.user, 'DEACTIVATE_USER', 'users', id, existing, { active: 0 }, req.ip);
 
   res.json({ message: 'User account deactivated successfully' });
+});
+
+// Admin reset Google Authenticator 2FA for a user
+router.post('/:id/reset-2fa', async (req, res) => {
+  const { id } = req.params;
+  const targetUser = await db.prepare('SELECT id, name, username FROM users WHERE id = ?').get(id);
+  if (!targetUser) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
+
+  await db.prepare('UPDATE users SET two_factor_enabled = 0, two_factor_secret = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  await logAudit(req.user, 'ADMIN_RESET_2FA', 'users', id, null, `Admin reset 2FA for user ${targetUser.username}`, req.ip);
+
+  res.json({ message: `Google Authenticator reset successfully for ${targetUser.username}.` });
 });
 
 module.exports = router;
