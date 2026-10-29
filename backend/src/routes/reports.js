@@ -31,7 +31,7 @@ router.get('/summary', async (req, res) => {
 
     // Monthly quotation count & value for last 6 months
     const monthlyTrends = (await db.prepare(`
-      SELECT strftime('%Y-%m', quotation_date) as month, 
+      SELECT SUBSTR(quotation_date, 1, 7) as month, 
              COUNT(*) as count, 
              SUM(grand_total) as total_value,
              SUM(CASE WHEN status IN ('Accepted', 'Converted to Booking') THEN grand_total ELSE 0 END) as accepted_value

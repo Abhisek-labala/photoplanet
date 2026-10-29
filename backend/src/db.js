@@ -19,9 +19,9 @@ pool.on('error', (err) => {
 function convertSql(sql) {
   let idx = 1;
   let pgSql = sql.replace(/\?/g, () => `$${idx++}`);
-  // Date format conversion
-  pgSql = pgSql.replace(/strftime\(['"]%Y-%m['"],\s*([^)]+)\)/gi, "to_char($1, 'YYYY-MM')");
-  pgSql = pgSql.replace(/strftime\(['"]%Y['"],\s*([^)]+)\)/gi, "to_char($1, 'YYYY')");
+  // Date format conversion (supports both text and timestamp columns)
+  pgSql = pgSql.replace(/strftime\(['"]%Y-%m['"],\s*([^)]+)\)/gi, "SUBSTR($1::text, 1, 7)");
+  pgSql = pgSql.replace(/strftime\(['"]%Y['"],\s*([^)]+)\)/gi, "SUBSTR($1::text, 1, 4)");
   // Case insensitivity
   pgSql = pgSql.replace(/COLLATE\s+NOCASE/gi, '');
   return pgSql;

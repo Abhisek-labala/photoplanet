@@ -1,6 +1,6 @@
 # Comprehensive Deployment Guide: DigitalOcean Droplet & GoDaddy DNS
 
-This guide walks you step-by-step through deploying the **PHOTO PLANET STUDIO PWA** to a **DigitalOcean Droplet** and connecting it to your subdomain **`at.photoplanet.in`** managed on **GoDaddy**, complete with free automated **SSL (HTTPS)**.
+This guide walks you step-by-step through deploying the **PHOTO PLANET STUDIO PWA** to a **DigitalOcean Droplet** and connecting it to your subdomain **`qt.photoplanet.in`** managed on **GoDaddy**, complete with free automated **SSL (HTTPS)**.
 
 ---
 
@@ -10,7 +10,7 @@ This guide walks you step-by-step through deploying the **PHOTO PLANET STUDIO PW
 [User Browser / PWA Mobile App]
                 │
                 ▼ (HTTPS - Port 443)
-       [GoDaddy DNS: at.photoplanet.in]
+       [GoDaddy DNS: qt.photoplanet.in]
                 │
                 ▼ (Public IPv4)
     [DigitalOcean Droplet (Ubuntu 24.04/22.04)]
@@ -65,14 +65,14 @@ This guide walks you step-by-step through deploying the **PHOTO PLANET STUDIO PW
 2. Find your domain **`photoplanet.in`** and click **DNS** (or **Manage DNS**).
 3. In the **DNS Records** table, look for existing records or click **Add New Record**:
    - **Type**: `A`
-   - **Name**: `at` *(this represents the subdomain `at.photoplanet.in`)*
+   - **Name**: `qt` *(this represents the subdomain `qt.photoplanet.in`)*
    - **Value / Data**: Paste your **DigitalOcean Droplet IP** (e.g., `159.65.123.45`)
    - **TTL**: `1/2 Hour` (or `600 seconds` / `Default`)
 4. Click **Save**.
 
 > 💡 **DNS Propagation Check**: It can take from 2 to 30 minutes for DNS to propagate. You can test it from your local terminal:
 > ```bash
-> ping at.photoplanet.in
+> ping qt.photoplanet.in
 > ```
 > When it returns your DigitalOcean IP, the DNS is active!
 
@@ -191,11 +191,16 @@ scp -r "d:\personal\photo planet pwa" root@<YOUR_DROPLET_IP>:/var/www/photoplane
 ```
 
 ### 2. Initialize Database Schema & Seed Data
-Run the provided `schema.sql` to create all tables and initial admin credentials:
+Run the provided `schema.sql` to create all tables and initial admin credentials, and grant ownership to `photoplanet_user`:
 
 ```bash
 cd /var/www/photoplanet
+
+# Run schema as postgres
 sudo -u postgres psql -d photoplanet -f backend/schema.sql
+
+# Grant full table & sequence permissions to photoplanet_user
+sudo -u postgres psql -d photoplanet -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO photoplanet_user; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO photoplanet_user; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO photoplanet_user; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO photoplanet_user;"
 ```
 
 ### 3. Create the Production Environment File
@@ -210,7 +215,7 @@ Paste the following configuration:
 ```env
 PORT=3000
 NODE_ENV=production
-DATABASE_URL=postgresql://photoplanet_user:StrongPassword2026!@localhost:5432/photoplanet
+DATABASE_URL=postgresql://photoplanet_user:StudioGfxqt!2026@localhost:5432/photoplanet
 JWT_SECRET=photoplanet_super_secret_jwt_key_903a5a80fd56a92085f2011f5552a44e
 JWT_EXPIRES_IN=7d
 CORS_ORIGIN=*
@@ -246,8 +251,6 @@ cd /var/www/photoplanet
 
 # Start the application
 pm2 start backend/server.js --name "photoplanet"
-
-# Save PM2 state so it restarts automatically on system boot
 pm2 save
 pm2 startup systemd
 ```
@@ -266,7 +269,7 @@ pm2 logs photoplanet --lines 20
 Create an Nginx configuration file for your subdomain:
 
 ```bash
-sudo nano /etc/nginx/sites-available/at.photoplanet.in
+sudo nano /etc/nginx/sites-available/qt.photoplanet.in
 ```
 
 Paste the following configuration:
@@ -274,7 +277,7 @@ Paste the following configuration:
 ```nginx
 server {
     listen 80;
-    server_name at.photoplanet.in;
+    server_name qt.photoplanet.in;
 
     # Allow up to 50MB uploads (for high-res logos and JSON backups)
     client_max_body_size 50M;
@@ -298,7 +301,8 @@ Save and exit: `Ctrl + O`, `Enter`, `Ctrl + X`.
 ### Enable the Site & Restart Nginx:
 ```bash
 # Enable the configuration
-sudo ln -s /etc/nginx/sites-available/at.photoplanet.in /etc/nginx/sites-enabled/
+sudo grep -i "qt.photoplanet.in" /etc/nginx/sites-available/qt.photoplanet.in
+sudo ln -s /etc/nginx/sites-available/qt.photoplanet.in /etc/nginx/sites-enabled/
 
 # Remove default site if present
 sudo rm -f /etc/nginx/sites-enabled/default
@@ -316,10 +320,10 @@ sudo systemctl reload nginx
 
 *(PWA requires HTTPS to enable Service Worker caching and installability)*
 
-Make sure your GoDaddy DNS for `at.photoplanet.in` has propagated, then run:
+Make sure your GoDaddy DNS for `qt.photoplanet.in` has propagated, then run:
 
 ```bash
-sudo certbot --nginx -d at.photoplanet.in
+sudo certbot --nginx -d qt.photoplanet.in
 ```
 
 1. Enter your email address when prompted (for renewal notices).
@@ -337,13 +341,13 @@ sudo certbot renew --dry-run
 ## Step 10: Verify & Test PWA Installation
 
 1. Open your browser and navigate to:
-   **`https://at.photoplanet.in`**
+   **`https://qt.photoplanet.in`**
 2. Log in using default credentials:
    - **Username**: `admin`
    - **Password**: `ChangeMe123!`
 3. Immediately navigate to **Staff & Access** in the sidebar to change your admin password.
 4. **PWA Mobile Testing**:
-   - Open `https://at.photoplanet.in` on Chrome (Android) or Safari (iOS).
+   - Open `https://qt.photoplanet.in` on Chrome (Android) or Safari (iOS).
    - Tap **Add to Home Screen** / **Install App**.
    - Launch the app from your home screen — it will open in full-screen standalone app mode!
 
