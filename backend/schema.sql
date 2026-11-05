@@ -163,7 +163,8 @@ CREATE TABLE IF NOT EXISTS quotation_status_history (
 
 -- 12. Settings Table
 CREATE TABLE IF NOT EXISTS settings (
-    key VARCHAR(100) PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    key VARCHAR(100) UNIQUE NOT NULL,
     value TEXT NOT NULL
 );
 
@@ -183,7 +184,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 -- 14. Quotation Sequence Table
 CREATE TABLE IF NOT EXISTS quotation_sequence (
-    year INTEGER PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    year INTEGER UNIQUE NOT NULL,
     current_number INTEGER NOT NULL DEFAULT 0
 );
 
