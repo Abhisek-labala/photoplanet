@@ -113,6 +113,10 @@ export const api = {
   createService: (data: any) => apiRequest('/services', { method: 'POST', body: JSON.stringify(data) }),
   updateService: (id: number, data: any) => apiRequest(`/services/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteService: (id: number) => apiRequest(`/services/${id}`, { method: 'DELETE' }),
+  updateServiceEventPrices: (serviceId: number, eventPrices: Record<number, number>) =>
+    apiRequest(`/services/${serviceId}/event-prices`, { method: 'PUT', body: JSON.stringify({ event_prices: eventPrices }) }),
+  setSingleEventPrice: (serviceId: number, eventTypeId: number, price: number) =>
+    apiRequest('/services/set-event-price', { method: 'POST', body: JSON.stringify({ service_id: serviceId, event_type_id: eventTypeId, price }) }),
 
   // Quotations
   getQuotations: (params?: { search?: string; status?: string; clientId?: number; startDate?: string; endDate?: string; includeArchived?: boolean }) => {

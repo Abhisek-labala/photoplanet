@@ -76,6 +76,7 @@ export interface Service {
   price: number;
   active: number;
   sort_order: number;
+  event_prices?: Record<number, number>;
 }
 
 export type QuotationStatus = 

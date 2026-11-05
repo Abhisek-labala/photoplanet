@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { ServiceCategory, Service } from '../../types';
+import type { ServiceCategory, Service, EventType } from '../../types';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { formatCurrency } from '../../utils/formatters';
@@ -10,7 +10,12 @@ import {
   Edit2, 
   Trash2,
   X,
-  Search
+  Search,
+  Tag,
+  Check,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface CategoryServiceCardProps {
@@ -21,6 +26,7 @@ interface CategoryServiceCardProps {
   onToggleActive: (svc: Service) => void;
   onDeleteService: (svc: Service) => void;
   onDeleteCategory: (category: ServiceCategory) => void;
+  onConfigureEventPrices: (svc: Service) => void;
 }
 
 const CategoryServiceCard: React.FC<CategoryServiceCardProps> = ({
@@ -30,7 +36,8 @@ const CategoryServiceCard: React.FC<CategoryServiceCardProps> = ({
   onStartEdit,
   onToggleActive,
   onDeleteService,
-  onDeleteCategory
+  onDeleteCategory,
+  onConfigureEventPrices
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -90,12 +97,13 @@ const CategoryServiceCard: React.FC<CategoryServiceCardProps> = ({
         <>
           {/* Responsive Table with horizontal scroll on small devices */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs min-w-[480px]">
+            <table className="w-full text-left text-xs min-w-[540px]">
               <thead>
                 <tr className="border-b border-slate-800 text-slate-400 font-semibold">
                   <th className="py-2.5 px-3">Service Name</th>
                   <th className="py-2.5 px-3">Unit</th>
                   <th className="py-2.5 px-3 text-right">Master Price</th>
+                  <th className="py-2.5 px-3 text-center">Event Rates</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
                   <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
@@ -114,6 +122,24 @@ const CategoryServiceCard: React.FC<CategoryServiceCardProps> = ({
                     </td>
                     <td className="py-3 px-3 text-right font-mono font-bold text-white">
                       {formatCurrency(svc.price, currencySymbol)}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <button
+                        onClick={() => onConfigureEventPrices(svc)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition-all cursor-pointer ${
+                          svc.event_prices && Object.keys(svc.event_prices).length > 0
+                            ? 'bg-indigo-950/70 border-indigo-700/60 text-indigo-300 hover:bg-indigo-900/80 hover:text-white'
+                            : 'bg-slate-800/80 border-slate-700/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        }`}
+                        title="Configure custom rates per event type"
+                      >
+                        <Tag className="w-3.5 h-3.5" />
+                        <span>
+                          {svc.event_prices && Object.keys(svc.event_prices).length > 0
+                            ? `${Object.keys(svc.event_prices).length} Custom`
+                            : 'Configure'}
+                        </span>
+                      </button>
                     </td>
                     <td className="py-3 px-3 text-center">
                       <button
@@ -177,6 +203,7 @@ export const ServiceMaster: React.FC = () => {
   const currencySymbol = settings?.currency_symbol || '₹';
 
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [eventTypes, setEventTypes] = useState<EventType[]>([]);
   const [search, setSearch] = useState('');
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [newServiceCategoryId, setNewServiceCategoryId] = useState<number | null>(null);
@@ -188,6 +215,13 @@ export const ServiceMaster: React.FC = () => {
   const [serviceDesc, setServiceDesc] = useState('');
   const [serviceUnit, setServiceUnit] = useState('Event');
   const [servicePrice, setServicePrice] = useState<number>(0);
+  const [formEventPrices, setFormEventPrices] = useState<Record<number, number | ''>>({});
+  const [showEventPricingSection, setShowEventPricingSection] = useState(false);
+
+  // Dedicated Event Rates Modal
+  const [pricingModalService, setPricingModalService] = useState<Service | null>(null);
+  const [pricingModalValues, setPricingModalValues] = useState<Record<number, number | ''>>({});
+  const [isSavingEventPrices, setIsSavingEventPrices] = useState(false);
 
   // New Category input
   const [showNewCatInput, setShowNewCatInput] = useState(false);
@@ -202,8 +236,18 @@ export const ServiceMaster: React.FC = () => {
     }
   };
 
+  const fetchEventTypes = async () => {
+    try {
+      const res = await api.getEventTypes(true);
+      setEventTypes(res.eventTypes || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchServices();
+    fetchEventTypes();
   }, []);
 
   const filteredCategories = useMemo(() => {
@@ -234,12 +278,20 @@ export const ServiceMaster: React.FC = () => {
     if (!serviceName.trim()) return;
 
     try {
+      const cleanFormPrices: Record<number, number> = {};
+      for (const [etId, val] of Object.entries(formEventPrices)) {
+        if (val !== '' && val !== null && !isNaN(Number(val)) && Number(val) >= 0) {
+          cleanFormPrices[Number(etId)] = Number(val);
+        }
+      }
+
       if (editingService) {
         await api.updateService(editingService.id, {
           name: serviceName.trim(),
           description: serviceDesc.trim() || null,
           unit: serviceUnit,
-          price: Number(servicePrice)
+          price: Number(servicePrice),
+          event_prices: cleanFormPrices
         });
       } else if (newServiceCategoryId) {
         await api.createService({
@@ -247,7 +299,8 @@ export const ServiceMaster: React.FC = () => {
           name: serviceName.trim(),
           description: serviceDesc.trim() || null,
           unit: serviceUnit,
-          price: Number(servicePrice)
+          price: Number(servicePrice),
+          event_prices: cleanFormPrices
         });
       }
       setEditingService(null);
@@ -255,6 +308,8 @@ export const ServiceMaster: React.FC = () => {
       setServiceName('');
       setServiceDesc('');
       setServicePrice(0);
+      setFormEventPrices({});
+      setShowEventPricingSection(false);
       fetchServices();
     } catch (err: any) {
       alert(err.message || 'Failed to save service');
@@ -289,6 +344,8 @@ export const ServiceMaster: React.FC = () => {
     setServiceDesc(svc.description || '');
     setServiceUnit(svc.unit);
     setServicePrice(svc.price);
+    setFormEventPrices(svc.event_prices ? { ...svc.event_prices } : {});
+    setShowEventPricingSection(false);
   };
 
   const handleStartCreate = (catId: number) => {
@@ -298,6 +355,33 @@ export const ServiceMaster: React.FC = () => {
     setServiceDesc('');
     setServiceUnit('Event');
     setServicePrice(0);
+    setFormEventPrices({});
+    setShowEventPricingSection(false);
+  };
+
+  const handleOpenEventPricesModal = (svc: Service) => {
+    setPricingModalService(svc);
+    setPricingModalValues(svc.event_prices ? { ...svc.event_prices } : {});
+  };
+
+  const handleSaveEventPricingModal = async () => {
+    if (!pricingModalService) return;
+    setIsSavingEventPrices(true);
+    try {
+      const cleanPrices: Record<number, number> = {};
+      for (const [etId, val] of Object.entries(pricingModalValues)) {
+        if (val !== '' && val !== null && !isNaN(Number(val)) && Number(val) >= 0) {
+          cleanPrices[Number(etId)] = Number(val);
+        }
+      }
+      await api.updateServiceEventPrices(pricingModalService.id, cleanPrices);
+      setPricingModalService(null);
+      fetchServices();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update event prices');
+    } finally {
+      setIsSavingEventPrices(false);
+    }
   };
 
   const handleDeleteService = async (svc: Service) => {
@@ -410,6 +494,7 @@ export const ServiceMaster: React.FC = () => {
                 onToggleActive={handleToggleServiceActive}
                 onDeleteService={handleDeleteService}
                 onDeleteCategory={handleDeleteCategory}
+                onConfigureEventPrices={handleOpenEventPricesModal}
               />
             ))}
           </div>
@@ -505,6 +590,50 @@ export const ServiceMaster: React.FC = () => {
                 </div>
               </div>
 
+              {/* Event-Specific Pricing Overrides (Optional) */}
+              {eventTypes.length > 0 && (
+                <div className="border-t border-slate-800 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowEventPricingSection(!showEventPricingSection)}
+                    className="flex items-center justify-between w-full text-slate-300 hover:text-white font-semibold text-xs py-1.5 cursor-pointer"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Event-Specific Rates ({Object.keys(formEventPrices).filter(k => formEventPrices[Number(k)] !== '' && formEventPrices[Number(k)] !== undefined).length} active)</span>
+                    </span>
+                    {showEventPricingSection ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  </button>
+
+                  {showEventPricingSection && (
+                    <div className="mt-2.5 space-y-2 bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 max-h-52 overflow-y-auto">
+                      <p className="text-[11px] text-slate-400 pb-1">
+                        Override the rate for specific event types. Blank entries use the Master Price ({formatCurrency(servicePrice || 0, currencySymbol)}).
+                      </p>
+                      {eventTypes.map(et => (
+                        <div key={et.id} className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/40 last:border-0">
+                          <span className="text-xs text-white font-medium truncate flex-1">{et.name}</span>
+                          <div className="flex items-center gap-1.5 w-32">
+                            <span className="text-slate-500 font-mono text-xs">{currencySymbol}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              placeholder={servicePrice ? String(servicePrice) : '0'}
+                              value={formEventPrices[et.id] !== undefined ? formEventPrices[et.id] : ''}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? '' : Number(e.target.value);
+                                setFormEventPrices(prev => ({ ...prev, [et.id]: val }));
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="pt-2 flex gap-3 pb-2">
                 <button
                   type="button"
@@ -524,6 +653,123 @@ export const ServiceMaster: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Dedicated Event Rates Modal */}
+      {pricingModalService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl relative my-8 max-h-[90vh] flex flex-col">
+            <button
+              onClick={() => setPricingModalService(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 rounded-xl cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-4">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-950/80 border border-indigo-800/60 text-indigo-400 text-[11px] font-bold mb-2">
+                <Tag className="w-3 h-3" />
+                <span>Event Rates Configuration</span>
+              </div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                {pricingModalService.name}
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Standard Master Price: <span className="font-mono font-bold text-white">{formatCurrency(pricingModalService.price, currencySymbol)}</span> per {pricingModalService.unit}. Configure specific prices for each event type below. Blank values inherit the master price.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2">
+              {eventTypes.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-500">
+                  No event types found. You can add event types under the "Event Types" section.
+                </div>
+              ) : (
+                eventTypes.map(et => {
+                  const hasCustom = pricingModalValues[et.id] !== undefined && pricingModalValues[et.id] !== '';
+                  return (
+                    <div 
+                      key={et.id}
+                      className={`flex items-center justify-between gap-3 p-3 rounded-2xl border transition-all ${
+                        hasCustom
+                          ? 'bg-slate-950/90 border-indigo-700/60'
+                          : 'bg-slate-950/40 border-slate-800/70'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs sm:text-sm font-semibold text-white truncate">{et.name}</span>
+                          {hasCustom && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                              Custom
+                            </span>
+                          )}
+                        </div>
+                        {et.description && (
+                          <div className="text-[11px] text-slate-500 truncate">{et.description}</div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="relative w-28 sm:w-32">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-xs">
+                            {currencySymbol}
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={pricingModalValues[et.id] !== undefined ? pricingModalValues[et.id] : ''}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Number(e.target.value);
+                              setPricingModalValues(prev => ({ ...prev, [et.id]: val }));
+                            }}
+                            placeholder={String(pricingModalService.price)}
+                            className="w-full pl-6 pr-2 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-indigo-500 text-right"
+                          />
+                        </div>
+
+                        {hasCustom && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPricingModalValues(prev => {
+                                const copy = { ...prev };
+                                delete copy[et.id];
+                                return copy;
+                              });
+                            }}
+                            className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Reset to Master Price"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPricingModalService(null)}
+                className="flex-1 py-3 rounded-2xl bg-slate-800 text-slate-300 font-semibold text-xs sm:text-sm cursor-pointer hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingEventPrices}
+                onClick={handleSaveEventPricingModal}
+                className="flex-1 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isSavingEventPrices ? 'Saving...' : 'Save Event Rates'}
+              </button>
+            </div>
           </div>
         </div>
       )}
