@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Client } from '../../types';
 import { api } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
-import { X, AlertTriangle, User, Phone, Mail, MapPin } from 'lucide-react';
+import { X, AlertTriangle, User, Phone, MapPin } from 'lucide-react';
 
 interface ClientModalProps {
   client?: Client | null;
@@ -19,15 +18,10 @@ export const ClientModal: React.FC<ClientModalProps> = ({
   onSaved,
   onSelectExisting
 }) => {
-  const { settings } = useAuth();
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [alternateMobile, setAlternateMobile] = useState('');
-  const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [pincode, setPincode] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,27 +32,18 @@ export const ClientModal: React.FC<ClientModalProps> = ({
       setName(client.name);
       setMobile(client.mobile);
       setAlternateMobile(client.alternate_mobile || '');
-      setEmail(client.email || '');
       setAddress(client.address || '');
-      setCity(client.city || '');
-      setState(client.state || '');
-      setPincode(client.pincode || '');
       setNotes(client.notes || '');
     } else {
       setName('');
       setMobile('');
       setAlternateMobile('');
-      setEmail('');
       setAddress('');
-      // Dynamic default city & state from studio settings
-      setCity(settings?.city || '');
-      setState(settings?.state || '');
-      setPincode(settings?.pincode || '');
       setNotes('');
     }
     setDuplicateWarning(null);
     setError(null);
-  }, [client, isOpen, settings]);
+  }, [client, isOpen]);
 
   // Check duplicate mobile as user types
   useEffect(() => {
@@ -103,11 +88,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
       name: name.trim(),
       mobile: mobile.trim(),
       alternate_mobile: alternateMobile.trim() || undefined,
-      email: email.trim() || undefined,
       address: address.trim() || undefined,
-      city: city.trim() || undefined,
-      state: state.trim() || undefined,
-      pincode: pincode.trim() || undefined,
       notes: notes.trim() || undefined
     };
 
@@ -167,7 +148,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
               <span>A client with this mobile number already exists!</span>
             </div>
             <p className="text-[11px] text-amber-300/80">
-              Found: <strong className="text-white">{duplicateWarning.name}</strong> ({duplicateWarning.client_code}) - {duplicateWarning.city || 'No City'}
+              Found: <strong className="text-white">{duplicateWarning.name}</strong> ({duplicateWarning.client_code}){duplicateWarning.address ? ` - ${duplicateWarning.address}` : ''}
             </p>
             {onSelectExisting && (
               <button
@@ -185,21 +166,21 @@ export const ClientModal: React.FC<ClientModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Client Name <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Full Name"
-                className="w-full px-3.5 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-h-[48px]"
-                required
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Client Name <span className="text-rose-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full Name"
+              className="w-full px-3.5 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-h-[48px]"
+              required
+            />
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Primary Mobile <span className="text-rose-400">*</span>
@@ -216,9 +197,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                 />
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Alternate Mobile
@@ -230,22 +209,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                 placeholder="Secondary / Family Contact"
                 className="w-full px-3.5 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-h-[48px] font-mono"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-5 h-5 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="client@email.com"
-                  className="w-full pl-11 pr-3.5 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-h-[48px]"
-                />
-              </div>
             </div>
           </div>
 
@@ -261,41 +224,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="Street address / Venue"
                 className="w-full pl-11 pr-3.5 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-h-[48px]"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">City</label>
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="City"
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-h-[46px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">State</label>
-              <input
-                type="text"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                placeholder="State"
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-h-[46px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Pincode</label>
-              <input
-                type="text"
-                value={pincode}
-                onChange={(e) => setPincode(e.target.value)}
-                placeholder="Pincode"
-                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-2xl text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 min-h-[46px] font-mono"
               />
             </div>
           </div>

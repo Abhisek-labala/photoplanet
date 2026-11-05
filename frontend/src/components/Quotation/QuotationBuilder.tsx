@@ -561,7 +561,7 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
                   </span>
                 </div>
                 <div className="text-slate-400 text-[11px]">
-                  Ph: {selectedClient.mobile} {selectedClient.city ? `• ${selectedClient.city}` : ''}
+                  Ph: {selectedClient.mobile} {selectedClient.address ? `• ${selectedClient.address}` : ''}
                 </div>
               </div>
             </div>

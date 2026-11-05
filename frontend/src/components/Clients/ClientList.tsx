@@ -10,7 +10,6 @@ import {
   Search, 
   UserPlus, 
   Phone, 
-  Mail, 
   MapPin, 
   FileText, 
   Edit, 
@@ -128,7 +127,7 @@ export const ClientList: React.FC<ClientListProps> = ({
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by client name, mobile number, client code, or city..."
+          placeholder="Search by client name, mobile number, client code, or address..."
           className="w-full pl-11 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors shadow-inner"
         />
       </div>
@@ -198,16 +197,10 @@ export const ClientList: React.FC<ClientListProps> = ({
                       </span>
                     )}
                   </div>
-                  {client.email && (
+                  {client.address && (
                     <div className="flex items-center gap-2 truncate">
-                      <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                      <span className="truncate">{client.email}</span>
-                    </div>
-                  )}
-                  {client.city && (
-                    <div className="flex items-center gap-2">
                       <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                      <span>{client.city}{client.state ? `, ${client.state}` : ''}</span>
+                      <span className="truncate">{client.address}</span>
                     </div>
                   )}
                 </div>

@@ -726,9 +726,8 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
             </div>
             <div className="print-meta-text text-xs text-slate-700 space-y-0.5">
               <div><strong>Mobile:</strong> {quotation.client_mobile}</div>
-              {quotation.client_email && <div><strong>Email:</strong> {quotation.client_email}</div>}
               {quotation.client_address && (
-                <div><strong>Address:</strong> {quotation.client_address}{quotation.client_city ? `, ${quotation.client_city}` : ''}</div>
+                <div><strong>Address:</strong> {quotation.client_address}</div>
               )}
             </div>
           </div>

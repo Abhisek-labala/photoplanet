@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
   }
 
   if (search && search.trim()) {
-    query += ` AND (c.name LIKE ? OR c.mobile LIKE ? OR c.client_code LIKE ? OR c.city LIKE ?)`;
+    query += ` AND (c.name LIKE ? OR c.mobile LIKE ? OR c.client_code LIKE ? OR c.address LIKE ?)`;
     const term = `%${search.trim()}%`;
     params.push(term, term, term, term);
   }
@@ -45,7 +45,7 @@ router.get('/check-mobile', async (req, res) => {
     return res.json({ exists: false });
   }
 
-  let query = 'SELECT id, client_code, name, mobile, city FROM clients WHERE mobile = ?';
+  let query = 'SELECT id, client_code, name, mobile, address FROM clients WHERE mobile = ?';
   const params = [mobile.trim()];
 
   if (excludeId) {

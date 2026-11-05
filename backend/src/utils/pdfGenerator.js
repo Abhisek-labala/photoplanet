@@ -220,19 +220,11 @@ function generateQuotationPdf(quotation, events, paymentTerms, settings, dataStr
     .text('Mobile: ', margin, cY, { continued: true })
     .font('Helvetica').fillColor('#0f172a').text(quotation.client_mobile);
 
-  if (quotation.client_email) {
-    cY = doc.y + 1;
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#475569')
-      .text('Email: ', margin, cY, { continued: true })
-      .font('Helvetica').fillColor('#0f172a').text(quotation.client_email);
-  }
-
   if (quotation.client_address) {
     cY = doc.y + 1;
-    const addr = `${quotation.client_address}${quotation.client_city ? `, ${quotation.client_city}` : ''}`;
     doc.fontSize(8).font('Helvetica-Bold').fillColor('#475569')
       .text('Address: ', margin, cY, { continued: true, width: 280 })
-      .font('Helvetica').fillColor('#0f172a').text(addr, { width: 280 });
+      .font('Helvetica').fillColor('#0f172a').text(quotation.client_address, { width: 280 });
   }
   const clientBottom = doc.y;
 

@@ -6,7 +6,6 @@ import {
   X, 
   User, 
   Phone, 
-  Mail, 
   MapPin, 
   Calendar, 
   FileText, 
@@ -85,16 +84,10 @@ export const ClientDetailModal: React.FC<ClientDetailModalProps> = ({
                       <Phone className="w-3.5 h-3.5 text-slate-500" />
                       {data.client.mobile}
                     </span>
-                    {data.client.email && (
-                      <span className="flex items-center gap-1">
-                        <Mail className="w-3.5 h-3.5 text-slate-500" />
-                        {data.client.email}
-                      </span>
-                    )}
-                    {data.client.city && (
+                    {data.client.address && (
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                        {data.client.city}, {data.client.state}
+                        {data.client.address}
                       </span>
                     )}
                   </div>
