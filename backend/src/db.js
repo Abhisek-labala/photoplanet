@@ -254,24 +254,30 @@ async function getNextClientCode() {
 
 console.log('[PostgreSQL] Database module initialized. Connected to:', pgUrl.replace(/:[^:@]+@/, ':****@'));
 
-// Ensure two_factor columns and table updates exist in database
-pool.query(`
-  ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER DEFAULT 0;
-  ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT DEFAULT NULL;
-  ALTER TABLE quotation_sequence ADD COLUMN IF NOT EXISTS id SERIAL;
-  ALTER TABLE settings ADD COLUMN IF NOT EXISTS id SERIAL;
-  CREATE TABLE IF NOT EXISTS service_event_prices (
-    id SERIAL PRIMARY KEY,
-    service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
-    event_type_id INTEGER NOT NULL REFERENCES event_types(id) ON DELETE CASCADE,
-    price NUMERIC(12, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (service_id, event_type_id)
-  );
-`).catch(err => {
-  console.warn('[PostgreSQL] Schema migration warning:', err.message);
-});
+// Ensure two_factor columns and table updates exist in database individually
+async function runAutoMigrations() {
+  const migrations = [
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT DEFAULT NULL',
+    `CREATE TABLE IF NOT EXISTS service_event_prices (
+      id SERIAL PRIMARY KEY,
+      service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+      event_type_id INTEGER NOT NULL REFERENCES event_types(id) ON DELETE CASCADE,
+      price NUMERIC(12, 2) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (service_id, event_type_id)
+    )`
+  ];
+  for (const sql of migrations) {
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      console.warn('[PostgreSQL Migration Warning]:', err.message);
+    }
+  }
+}
+runAutoMigrations();
 
 module.exports = {
   db,

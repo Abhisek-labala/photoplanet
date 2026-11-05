@@ -109,7 +109,11 @@ const CategoryServiceCard: React.FC<CategoryServiceCardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {paginatedServices.map(svc => (
+                {paginatedServices.map(svc => {
+                  const customCount = Object.values(svc.event_prices || {}).filter(
+                    v => v !== null && v !== undefined && !isNaN(Number(v))
+                  ).length;
+                  return (
                   <tr key={svc.id} className={`hover:bg-slate-800/40 ${svc.active === 0 ? 'opacity-40' : ''}`}>
                     <td className="py-3 px-3">
                       <div className="font-bold text-white text-xs sm:text-sm">{svc.name}</div>
@@ -127,7 +131,7 @@ const CategoryServiceCard: React.FC<CategoryServiceCardProps> = ({
                       <button
                         onClick={() => onConfigureEventPrices(svc)}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition-all cursor-pointer ${
-                          svc.event_prices && Object.keys(svc.event_prices).length > 0
+                          customCount > 0
                             ? 'bg-indigo-950/70 border-indigo-700/60 text-indigo-300 hover:bg-indigo-900/80 hover:text-white'
                             : 'bg-slate-800/80 border-slate-700/70 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                         }`}
@@ -135,9 +139,7 @@ const CategoryServiceCard: React.FC<CategoryServiceCardProps> = ({
                       >
                         <Tag className="w-3.5 h-3.5" />
                         <span>
-                          {svc.event_prices && Object.keys(svc.event_prices).length > 0
-                            ? `${Object.keys(svc.event_prices).length} Custom`
-                            : 'Configure'}
+                          {customCount > 0 ? `${customCount} Custom` : 'Configure'}
                         </span>
                       </button>
                     </td>
@@ -172,7 +174,7 @@ const CategoryServiceCard: React.FC<CategoryServiceCardProps> = ({
                       </div>
                     </td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </div>
@@ -310,7 +312,7 @@ export const ServiceMaster: React.FC = () => {
       setServicePrice(0);
       setFormEventPrices({});
       setShowEventPricingSection(false);
-      fetchServices();
+      await fetchServices();
     } catch (err: any) {
       alert(err.message || 'Failed to save service');
     }
@@ -319,7 +321,7 @@ export const ServiceMaster: React.FC = () => {
   const handleToggleServiceActive = async (svc: Service) => {
     try {
       await api.updateService(svc.id, { active: svc.active ? 0 : 1 });
-      fetchServices();
+      await fetchServices();
     } catch (err: any) {
       alert(err.message || 'Failed to update service status');
     }
@@ -331,7 +333,7 @@ export const ServiceMaster: React.FC = () => {
       await api.createCategory({ name: newCatName.trim().toUpperCase() });
       setNewCatName('');
       setShowNewCatInput(false);
-      fetchServices();
+      await fetchServices();
     } catch (err: any) {
       alert(err.message || 'Failed to create category');
     }
@@ -376,7 +378,7 @@ export const ServiceMaster: React.FC = () => {
       }
       await api.updateServiceEventPrices(pricingModalService.id, cleanPrices);
       setPricingModalService(null);
-      fetchServices();
+      await fetchServices();
     } catch (err: any) {
       alert(err.message || 'Failed to update event prices');
     } finally {
@@ -600,7 +602,7 @@ export const ServiceMaster: React.FC = () => {
                   >
                     <span className="flex items-center gap-1.5">
                       <Tag className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Event-Specific Rates ({Object.keys(formEventPrices).filter(k => formEventPrices[Number(k)] !== '' && formEventPrices[Number(k)] !== undefined).length} active)</span>
+                      <span>Event-Specific Rates ({Object.keys(formEventPrices).filter(k => formEventPrices[Number(k)] !== '' && formEventPrices[Number(k)] !== undefined).length} custom configured)</span>
                     </span>
                     {showEventPricingSection ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                   </button>
@@ -610,25 +612,35 @@ export const ServiceMaster: React.FC = () => {
                       <p className="text-[11px] text-slate-400 pb-1">
                         Override the rate for specific event types. Blank entries use the Master Price ({formatCurrency(servicePrice || 0, currencySymbol)}).
                       </p>
-                      {eventTypes.map(et => (
-                        <div key={et.id} className="flex items-center justify-between gap-2 py-1 border-b border-slate-800/40 last:border-0">
-                          <span className="text-xs text-white font-medium truncate flex-1">{et.name}</span>
-                          <div className="flex items-center gap-1.5 w-32">
-                            <span className="text-slate-500 font-mono text-xs">{currencySymbol}</span>
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder={servicePrice ? String(servicePrice) : '0'}
-                              value={formEventPrices[et.id] !== undefined ? formEventPrices[et.id] : ''}
-                              onChange={(e) => {
-                                const val = e.target.value === '' ? '' : Number(e.target.value);
-                                setFormEventPrices(prev => ({ ...prev, [et.id]: val }));
-                              }}
-                              className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
-                            />
+                      {eventTypes.map(et => {
+                        const hasVal = formEventPrices[et.id] !== undefined && formEventPrices[et.id] !== '';
+                        return (
+                          <div key={et.id} className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-800/40 last:border-0">
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                              <span className="text-xs text-white font-medium truncate">{et.name}</span>
+                              {hasVal && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">
+                                  Custom
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 w-36">
+                              <span className="text-slate-500 font-mono text-xs">{currencySymbol}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder={`Master (${servicePrice || 0})`}
+                                value={formEventPrices[et.id] !== undefined ? formEventPrices[et.id] : ''}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? '' : Number(e.target.value);
+                                  setFormEventPrices(prev => ({ ...prev, [et.id]: val }));
+                                }}
+                                className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -725,8 +737,8 @@ export const ServiceMaster: React.FC = () => {
                               const val = e.target.value === '' ? '' : Number(e.target.value);
                               setPricingModalValues(prev => ({ ...prev, [et.id]: val }));
                             }}
-                            placeholder={String(pricingModalService.price)}
-                            className="w-full pl-6 pr-2 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-indigo-500 text-right"
+                            placeholder={`Master (${pricingModalService.price || 0})`}
+                            className="w-full pl-6 pr-2 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-white font-mono placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 text-right"
                           />
                         </div>
 

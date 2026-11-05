@@ -1,13 +1,35 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../db');
+const { db, pool } = require('../db');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { logAudit } = require('../middleware/audit');
 
 router.use(authenticateToken);
 
+let tableChecked = false;
+async function ensureServiceEventPricesTable() {
+  if (tableChecked) return;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS service_event_prices (
+        id SERIAL PRIMARY KEY,
+        service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+        event_type_id INTEGER NOT NULL REFERENCES event_types(id) ON DELETE CASCADE,
+        price NUMERIC(12, 2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (service_id, event_type_id)
+      )
+    `);
+    tableChecked = true;
+  } catch (err) {
+    console.error('[service_event_prices ensure error]:', err.message);
+  }
+}
+
 // Get all service categories with their services
 router.get('/', async (req, res) => {
+  await ensureServiceEventPricesTable();
   const { all } = req.query;
   let catQuery = 'SELECT * FROM service_categories';
   if (all !== 'true') {
@@ -34,7 +56,7 @@ router.get('/', async (req, res) => {
       eventPriceMap[r.service_id][r.event_type_id] = Number(r.price);
     }
   } catch (err) {
-    // If table doesn't exist yet, continue gracefully
+    console.error('[GET /api/services] Error loading event prices:', err.message);
   }
 
   const enrichedServices = services.map(s => ({
@@ -133,6 +155,7 @@ router.post('/', requireAdmin, async (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(category_id, name.trim(), description || null, unit || 'Event', Number(price), sort_order || 0);
 
+  await ensureServiceEventPricesTable();
   const newServiceId = result.lastInsertRowid;
 
   // Save event-specific prices if provided
@@ -143,10 +166,9 @@ router.post('/', requireAdmin, async (req, res) => {
           await db.prepare(`
             INSERT INTO service_event_prices (service_id, event_type_id, price)
             VALUES (?, ?, ?)
-            ON CONFLICT (service_id, event_type_id) DO UPDATE SET price = excluded.price, updated_at = CURRENT_TIMESTAMP
           `).run(newServiceId, Number(etId), Number(evPrice));
         } catch (e) {
-          console.warn('Failed to insert service_event_price:', e.message);
+          console.error('Failed to insert service_event_price:', e.message);
         }
       }
     }
@@ -175,6 +197,8 @@ router.put('/:id', requireAdmin, async (req, res) => {
     return res.status(404).json({ error: 'Service not found.' });
   }
 
+  await ensureServiceEventPricesTable();
+
   await db.prepare(`
     UPDATE services SET
       category_id = ?,
@@ -198,21 +222,20 @@ router.put('/:id', requireAdmin, async (req, res) => {
   );
 
   // Update event-specific prices if provided
-  if (event_prices && typeof event_prices === 'object') {
-    for (const [etId, evPrice] of Object.entries(event_prices)) {
-      try {
-        if (evPrice === '' || evPrice === null || isNaN(Number(evPrice))) {
-          await db.prepare('DELETE FROM service_event_prices WHERE service_id = ? AND event_type_id = ?').run(id, Number(etId));
-        } else {
+  if (event_prices !== undefined && typeof event_prices === 'object') {
+    try {
+      await db.prepare('DELETE FROM service_event_prices WHERE service_id = ?').run(id);
+      for (const [etId, evPrice] of Object.entries(event_prices)) {
+        if (evPrice !== '' && evPrice !== null && !isNaN(Number(evPrice))) {
           await db.prepare(`
             INSERT INTO service_event_prices (service_id, event_type_id, price)
             VALUES (?, ?, ?)
-            ON CONFLICT (service_id, event_type_id) DO UPDATE SET price = excluded.price, updated_at = CURRENT_TIMESTAMP
           `).run(id, Number(etId), Number(evPrice));
         }
-      } catch (e) {
-        console.warn('Failed to update service_event_price:', e.message);
       }
+    } catch (e) {
+      console.error('Failed to update service_event_prices in PUT /api/services/:id:', e);
+      return res.status(500).json({ error: 'Failed to update event prices: ' + e.message });
     }
   }
 
@@ -237,21 +260,22 @@ router.put('/:id/event-prices', requireAdmin, async (req, res) => {
     return res.status(404).json({ error: 'Service not found.' });
   }
 
-  if (event_prices && typeof event_prices === 'object') {
-    for (const [etId, evPrice] of Object.entries(event_prices)) {
-      try {
-        if (evPrice === '' || evPrice === null || isNaN(Number(evPrice))) {
-          await db.prepare('DELETE FROM service_event_prices WHERE service_id = ? AND event_type_id = ?').run(id, Number(etId));
-        } else {
+  await ensureServiceEventPricesTable();
+
+  if (event_prices !== undefined && typeof event_prices === 'object') {
+    try {
+      await db.prepare('DELETE FROM service_event_prices WHERE service_id = ?').run(id);
+      for (const [etId, evPrice] of Object.entries(event_prices)) {
+        if (evPrice !== '' && evPrice !== null && !isNaN(Number(evPrice))) {
           await db.prepare(`
             INSERT INTO service_event_prices (service_id, event_type_id, price)
             VALUES (?, ?, ?)
-            ON CONFLICT (service_id, event_type_id) DO UPDATE SET price = excluded.price, updated_at = CURRENT_TIMESTAMP
           `).run(id, Number(etId), Number(evPrice));
         }
-      } catch (e) {
-        console.warn('Failed to set service_event_price:', e.message);
       }
+    } catch (e) {
+      console.error('Failed to set service_event_prices in PUT /:id/event-prices:', e);
+      return res.status(500).json({ error: 'Failed to set event prices: ' + e.message });
     }
   }
 
@@ -269,6 +293,8 @@ router.post('/set-event-price', async (req, res) => {
     return res.status(400).json({ error: 'service_id, event_type_id, and valid price are required.' });
   }
 
+  await ensureServiceEventPricesTable();
+
   try {
     await db.prepare(`
       INSERT INTO service_event_prices (service_id, event_type_id, price)
@@ -283,7 +309,8 @@ router.post('/set-event-price', async (req, res) => {
       price: Number(price)
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to save event price', details: err.message });
+    console.error('Failed in /set-event-price:', err);
+    res.status(500).json({ error: 'Failed to save event price: ' + err.message });
   }
 });
 
