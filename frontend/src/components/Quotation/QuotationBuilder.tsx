@@ -23,8 +23,7 @@ import {
   Layers,
   AlertCircle,
   Sparkles,
-  X,
-  Edit2
+  X
 } from 'lucide-react';
 
 interface QuotationBuilderProps {
@@ -101,9 +100,6 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
   const [activeEventIndex, setActiveEventIndex] = useState<number | null>(null);
   const [serviceSearch, setServiceSearch] = useState('');
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('ALL');
-  const [editingEventPriceServiceId, setEditingEventPriceServiceId] = useState<number | null>(null);
-  const [customEventPriceInput, setCustomEventPriceInput] = useState<string>('');
-  const [isSavingEventPrice, setIsSavingEventPrice] = useState<boolean>(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -272,65 +268,6 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
       }
     }
     return { price: Number(svc.price) || 0, isEventSpecific: false };
-  };
-
-  const handleSaveServiceEventPrice = async (serviceId: number, newPrice: number) => {
-    if (activeEventIndex === null) return;
-    const currentEvtType = events[activeEventIndex]?.event_type || '';
-    const matchedEventType = eventTypes.find(et => et.name.trim().toLowerCase() === currentEvtType.trim().toLowerCase());
-    if (!matchedEventType) {
-      alert(`Could not find event type: ${currentEvtType}`);
-      return;
-    }
-
-    setIsSavingEventPrice(true);
-    try {
-      await api.setSingleEventPrice(serviceId, matchedEventType.id, newPrice);
-
-      // Update in-memory categories & services
-      setCategories(prev => prev.map(cat => ({
-        ...cat,
-        services: (cat.services || []).map(svc => {
-          if (svc.id === serviceId) {
-            return {
-              ...svc,
-              event_prices: {
-                ...(svc.event_prices || {}),
-                [matchedEventType.id]: newPrice
-              }
-            };
-          }
-          return svc;
-        })
-      })));
-
-      // If already added to current active event, update its unit_price and total
-      setEvents(prev => {
-        const copy = [...prev];
-        const targetEvt = copy[activeEventIndex];
-        if (targetEvt) {
-          targetEvt.items = targetEvt.items.map(it => {
-            if (it.service_id === serviceId) {
-              const qty = Number(it.quantity) || 1;
-              const disc = Number(it.discount) || 0;
-              return {
-                ...it,
-                unit_price: newPrice,
-                total: Math.round(Math.max(0, (qty * newPrice) - disc) * 100) / 100
-              };
-            }
-            return it;
-          });
-        }
-        return copy;
-      });
-
-      setEditingEventPriceServiceId(null);
-    } catch (err: any) {
-      alert(err.message || 'Failed to save event price');
-    } finally {
-      setIsSavingEventPrice(false);
-    }
   };
 
   const updateEventField = (index: number, field: keyof QuotationEvent, val: any) => {
@@ -795,15 +732,12 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
                           </button>
                         </div>
 
-                        {/* Rate */}
-                        <div className="w-24">
+                        {/* Rate (Read-only as per Event/Master pricing) */}
+                        <div className="w-24 text-right">
                           <span className="text-[10px] text-slate-500 block">Rate</span>
-                          <input
-                            type="number"
-                            value={item.unit_price}
-                            onChange={(e) => updateItem(eventIdx, itemIdx, { unit_price: Number(e.target.value) })}
-                            className="w-full px-2 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-white text-right focus:outline-none"
-                          />
+                          <div className="font-mono text-slate-200 text-xs sm:text-sm font-semibold py-1">
+                            {formatCurrency(item.unit_price, currencySymbol)}
+                          </div>
                         </div>
 
                         {/* Line Total */}
@@ -1088,16 +1022,10 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
                 const isSelected = events[activeEventIndex]?.items.some(it => it.service_id === svc.id);
                 const currentEvtType = events[activeEventIndex]?.event_type || '';
                 const { price: resolvedPrice, isEventSpecific } = getResolvedServicePrice(svc, currentEvtType);
-                const isEditingPrice = editingEventPriceServiceId === svc.id;
-
                 return (
                   <div
                     key={svc.id}
-                    onClick={() => {
-                      if (!isEditingPrice) {
-                        toggleServiceInEvent(activeEventIndex, svc);
-                      }
-                    }}
+                    onClick={() => toggleServiceInEvent(activeEventIndex, svc)}
                     className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 active:scale-99 ${isSelected
                       ? 'bg-sky-950/40 border-sky-500/60 shadow-[0_0_15px_rgba(2,132,199,0.12)]'
                       : 'bg-slate-950 hover:bg-slate-800/60 border-slate-800'
@@ -1117,76 +1045,22 @@ export const QuotationBuilder: React.FC<QuotationBuilderProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-                      {isEditingPrice ? (
-                        <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 p-1.5 bg-slate-900 border border-sky-500 rounded-xl shadow-xl">
-                          <span className="text-xs text-sky-400 font-bold">{currencySymbol}</span>
-                          <input
-                            type="number"
-                            value={customEventPriceInput}
-                            onChange={(e) => setCustomEventPriceInput(e.target.value)}
-                            className="w-20 px-2 py-1 bg-slate-950 text-white font-mono text-xs rounded-lg border border-slate-700 focus:outline-none"
-                            placeholder="Price"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const val = Number(customEventPriceInput);
-                                if (!isNaN(val) && val >= 0) handleSaveServiceEventPrice(svc.id, val);
-                              } else if (e.key === 'Escape') {
-                                setEditingEventPriceServiceId(null);
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const val = Number(customEventPriceInput);
-                              if (!isNaN(val) && val >= 0) handleSaveServiceEventPrice(svc.id, val);
-                            }}
-                            disabled={isSavingEventPrice}
-                            className="px-2 py-1 bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-bold rounded-lg cursor-pointer"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingEventPriceServiceId(null)}
-                            className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <span className="text-xs sm:text-sm font-bold font-mono text-white">
-                              {formatCurrency(resolvedPrice, currencySymbol)}
+                      <div className="text-right">
+                        <span className="text-xs sm:text-sm font-bold font-mono text-white block">
+                          {formatCurrency(resolvedPrice, currencySymbol)}
+                        </span>
+                        <div className="flex items-center justify-end gap-1 mt-0.5">
+                          {isEventSpecific ? (
+                            <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/40">
+                              {currentEvtType} Rate
                             </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingEventPriceServiceId(svc.id);
-                                setCustomEventPriceInput(String(resolvedPrice));
-                              }}
-                              className="p-1 text-slate-400 hover:text-sky-300 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                              title={`Configure price for ${currentEvtType}`}
-                            >
-                              <Edit2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <div className="flex items-center justify-end gap-1 mt-0.5">
-                            {isEventSpecific ? (
-                              <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800/40">
-                                {currentEvtType} Rate
-                              </span>
-                            ) : (
-                              <span className="text-[9px] text-slate-500">
-                                Standard Rate
-                              </span>
-                            )}
-                          </div>
+                          ) : (
+                            <span className="text-[9px] text-slate-500">
+                              Standard Rate
+                            </span>
+                          )}
                         </div>
-                      )}
+                      </div>
 
                       {isSelected ? (
                         <div className="flex items-center gap-2">
