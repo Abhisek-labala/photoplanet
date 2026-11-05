@@ -100,25 +100,6 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
     try {
       // 1. Primary: High-resolution vector PDF generated from server
       const pdfBlob = await api.getQuotationPdfBlob(quotationId);
-      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-      // Mobile share sheet (WhatsApp, Mail, Save to Files, AirDrop)
-      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-        try {
-          await navigator.share({
-            title: `Quotation ${data.quotation.quotation_number}`,
-            text: `Quotation for ${data.quotation.client_name} - ${data.settings?.studio_name || 'Studio'}`,
-            files: [pdfFile]
-          });
-          setIsGeneratingPdf(false);
-          return;
-        } catch (shareErr: any) {
-          if (shareErr.name === 'AbortError') {
-            setIsGeneratingPdf(false);
-            return;
-          }
-        }
-      }
 
       // Direct device file download
       const downloadUrl = URL.createObjectURL(pdfBlob);
@@ -460,12 +441,27 @@ export const QuotationView: React.FC<QuotationViewProps> = ({
   const handleNativeShare = async () => {
     if (!data) return;
     const quoteUrl = `${window.location.origin}/quotations/${data.quotation.id}`;
+    const safeClientName = (data.quotation.client_name || 'Client').replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `${data.quotation.quotation_number}_${safeClientName}.pdf`;
+
     try {
       if (navigator.share) {
+        let filesToShare: File[] | undefined;
+        try {
+          const pdfBlob = await api.getQuotationPdfBlob(quotationId);
+          const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+          if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+            filesToShare = [pdfFile];
+          }
+        } catch {
+          // fallback without file
+        }
+
         await navigator.share({
           title: `Quotation ${data.quotation.quotation_number} - ${data.settings?.studio_name || 'Studio'}`,
           text: getQuotationSummaryText(),
-          url: quoteUrl
+          url: quoteUrl,
+          ...(filesToShare ? { files: filesToShare } : {})
         });
       } else {
         await handleCopySummary();
